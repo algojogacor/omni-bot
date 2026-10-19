@@ -85,6 +85,49 @@ export class GoogleCalendarService {
     return this.calendarClient;
   }
 
+  private static cachedCalendarId: string | null = null;
+
+  /**
+   * Resolves the target Google Calendar ID.
+   * If the preferred calendar ID is not accessible, falls back to any accessible shared calendar.
+   */
+  static async resolveCalendarId(): Promise<string> {
+    if (this.cachedCalendarId) return this.cachedCalendarId;
+
+    const calendar = this.getClient();
+    const preferredId = env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
+
+    // 1. Try preferred ID
+    try {
+      await calendar.calendars.get({ calendarId: preferredId });
+      this.cachedCalendarId = preferredId;
+      return preferredId;
+    } catch (err: any) {
+      console.warn(
+        `[GCal] Preferred calendar '${preferredId}' not directly accessible (${err?.message}). Searching accessible shared calendars...`
+      );
+    }
+
+    // 2. Search calendar list for any accessible calendar
+    try {
+      const list = await calendar.calendarList.list();
+      const items = list.data.items || [];
+      if (items.length > 0) {
+        const found =
+          items.find((c) => c.accessRole === "owner" || c.accessRole === "writer") || items[0];
+        if (found && found.id) {
+          console.log(`[GCal] Falling back to accessible shared calendar: '${found.summary}' (${found.id})`);
+          this.cachedCalendarId = found.id;
+          return found.id;
+        }
+      }
+    } catch (listErr: any) {
+      console.warn("[GCal] Could not query calendar list:", listErr?.message);
+    }
+
+    return preferredId;
+  }
+
   /**
    * Creates an event in Arya's Google Calendar
    */
@@ -95,7 +138,7 @@ export class GoogleCalendarService {
     endTime: string;
   }> {
     const calendar = this.getClient();
-    const calendarId = env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
+    const calendarId = await this.resolveCalendarId();
 
     const startDate = new Date(payload.startTime);
     let endDate: Date;
@@ -141,7 +184,7 @@ export class GoogleCalendarService {
    */
   static async deleteEvent(eventId: string): Promise<boolean> {
     const calendar = this.getClient();
-    const calendarId = env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
+    const calendarId = await this.resolveCalendarId();
 
     try {
       await calendar.events.delete({
@@ -174,7 +217,7 @@ export class GoogleCalendarService {
     }>
   > {
     const calendar = this.getClient();
-    const calendarId = env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
+    const calendarId = await this.resolveCalendarId();
 
     const response = await calendar.events.list({
       calendarId,

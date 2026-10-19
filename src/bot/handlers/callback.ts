@@ -193,6 +193,14 @@ export async function handleCallbackQuery(ctx: Context) {
       return;
     }
 
+    if (ev.synced || ev.googleEventId) {
+      await ctx.answerCallbackQuery({
+        text: "Event ini sudah berhasil disinkronkan ke Google Calendar.",
+        show_alert: false,
+      });
+      return;
+    }
+
     try {
       const gcalResult = await GoogleCalendarService.createEvent({
         title: ev.title,
@@ -200,6 +208,11 @@ export async function handleCallbackQuery(ctx: Context) {
         endTime: ev.end_time || ev.endTime,
         description: ev.description,
       });
+
+      // Mark event as synced in draft payload
+      ev.synced = true;
+      ev.googleEventId = gcalResult.eventId;
+      await DraftManager.updateDraft(draftId, payload);
 
       // Persist in calendar_events table
       await db.insert(calendarEvents).values({
