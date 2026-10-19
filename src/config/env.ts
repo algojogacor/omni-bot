@@ -21,8 +21,10 @@ const envSchema = z.object({
   GROQ_FALLBACK_MODEL: z.string().default("llama-3.1-8b-instant"),
 
   // Google Calendar Service Account
-  GOOGLE_SERVICE_ACCOUNT_KEY: z.string().optional(),
+  GOOGLE_CLIENT_EMAIL: z.string().optional(),
+  GOOGLE_PRIVATE_KEY: z.string().optional(),
   GOOGLE_CALENDAR_ID: z.string().optional(),
+  GOOGLE_SERVICE_ACCOUNT_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

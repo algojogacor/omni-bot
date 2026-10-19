@@ -35,4 +35,11 @@
 - [2026-10-19 11:17] Membaca PRD.md dan aturan sistem.
 - [2026-10-19 11:21] Mengunduh dan memasang `koyeb-cli` v5.12.0 ke `.local\bin`.
 - [2026-10-19 11:22] Inisialisasi Git repository dan membuat `.gitignore`.
-- [2026-10-19 11:23] Menyusun `worklog.md` dan rencana implementasi lengkap.
+- [2026-10-19 11:23] Menyusun `worklog.md` dan rencana implementasi lengkap di `docs/superpowers/plans/2026-10-19-omni-bot-architecture-and-skeleton.md`.
+- [2026-10-19 11:30] Repository GitHub `https://github.com/algojogacor/omni-bot` dihubungkan dan dipush branch `main`.
+- [2026-10-19 11:33] Skema Drizzle (`wallets`, `transactions`, `drafts`, `calendar_events`, `weekly_reports`, `processed_updates`) selesai dibuat.
+- [2026-10-19 11:33] Koneksi Turso (`libsql://omni-bot-algojogacor.aws-ap-northeast-1.turso.io`) diuji dan berhasil membuat seluruh tabel serta inisialisasi 3 dompet default (`Tunai`, `GoPay`, `Bank Mandiri`).
+- [2026-10-19 11:34] Deployment kerangka awal Bun ke Koyeb (`usual-olwen` -> `omni-bot`) BERHASIL & HEALTHY.
+  - Endpoint: `https://usual-olwen-algojogacorbgt-a2be655b.koyeb.app/health`
+  - Hasil benchmark: RSS hanya 47.56 MB (dari kuota 512 MB), Heap Used 1.55 MB, uptime stabil.
+  - Kesimpulan: **Bun 1.4.3 terbukti sangat aman, ringan, dan stabil di instance Koyeb 0.1 vCPU**. Tidak perlu beralih ke Node.js.
