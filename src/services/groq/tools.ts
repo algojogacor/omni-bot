@@ -161,6 +161,63 @@ export const GROQ_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "create_schedule_event",
+      description: "Mencatat rencana jadwal, agenda, janji temu, atau kegiatan baru Arya ke draf Google Calendar.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Nama kegiatan atau jadwal (misal: 'Sidang Semhas', 'Ujian Hukum Pidana', 'Bimbingan Dosen').",
+          },
+          start_time: {
+            type: "string",
+            description: "Waktu mulai dalam format ISO dengan offset WIB, contoh: 2026-10-21T10:00:00+07:00. Gunakan tabel acuan tanggal untuk menentukan tanggal yang tepat.",
+          },
+          end_time: {
+            type: "string",
+            description: "Waktu selesai format ISO WIB jika disebutkan (opsional).",
+          },
+          description: {
+            type: "string",
+            description: "Keterangan atau lokasi kegiatan jika ada.",
+          },
+          is_deadline: {
+            type: "boolean",
+            description: "Set true jika ini adalah tenggat waktu/deadline tugas.",
+          },
+        },
+        required: ["title", "start_time"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "query_schedule",
+      description: "Menanyakan jadwal kegiatan, agenda yang terdaftar di Google Calendar, atau mencari jadwal terdekat.",
+      parameters: {
+        type: "object",
+        properties: {
+          time_min: {
+            type: "string",
+            description: "Batas awal waktu pencarian format ISO WIB (contoh: awal hari yang ditanyakan). Jika menanyakan jadwal terdekat/mendatang, gunakan waktu sekarang.",
+          },
+          time_max: {
+            type: "string",
+            description: "Batas akhir waktu pencarian format ISO WIB (contoh: akhir hari yang ditanyakan, atau akhir minggu/bulan).",
+          },
+          label: {
+            type: "string",
+            description: "Keterangan rentang waktu pencarian dalam bahasa manusia (misal: 'Hari Ini', 'Besok', 'Senin Depan', 'Minggu Ini', 'Terdekat').",
+          },
+        },
+      },
+    },
+  },
 ];
 
 /**
@@ -212,6 +269,8 @@ ATURAN UTAMA:
    - Jika dompet TIDAK disebut ("makan soto 20rb"), set parameter wallet ke null. Sistem akan menanyakan dompet ke Arya.
 5. Transfer memindahkan saldo antar dompet (misal: 'tarik tunai 50k', 'top up gopay 100k dari mandiri') -> Panggil tool 'transfer_wallet'.
 6. Jika user tanya rekap, saldo, atau sisa uang -> Panggil tool 'query_recap'.
-7. Jika teks berupa log obrolan grup panjang atau forward chat -> Panggil tool 'summarize_group_log'.
-8. Jawab ringkas dan jelas.`;
+7. Jika user ingin mencatat jadwal/kegiatan/agenda pribadi ("saya lusa jam 10 ada sidang semhas", "besok jam 2 siang ada rapat") -> Panggil tool 'create_schedule_event'.
+8. Jika user menanyakan jadwal/kegiatan ("apa jadwal terdekat saya?", "senin depan ada jadwal apa?", "hari ini ada jadwal apa?") -> Panggil tool 'query_schedule'.
+9. Jika teks berupa log obrolan grup panjang atau forward chat -> Panggil tool 'summarize_group_log'.
+10. Jawab ringkas dan jelas.`;
 }

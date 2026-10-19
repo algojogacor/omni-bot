@@ -41,6 +41,12 @@ export type DeterministicResult =
       };
     }
   | {
+      intent: "schedule_query";
+      data: {
+        label: string;
+      };
+    }
+  | {
       intent: "group_log_unsupported";
     }
   | {
@@ -124,7 +130,17 @@ export function parseDeterministicMessage(rawText: string): DeterministicResult 
     return { intent: "recap", data: { period: "this_month", category } };
   }
 
-  // 4. Check initial balance: "saldo awal tunai 100rb"
+  // 4. Check schedule / calendar query
+  if (/\b(jadwal|agenda|kegiatan)\b/i.test(lower)) {
+    let label = "Mendatang";
+    if (lower.includes("hari ini")) label = "Hari Ini";
+    else if (lower.includes("besok")) label = "Besok";
+    else if (lower.includes("minggu ini")) label = "Minggu Ini";
+    else if (lower.includes("terdekat")) label = "Terdekat";
+    return { intent: "schedule_query", data: { label } };
+  }
+
+  // 5. Check initial balance: "saldo awal tunai 100rb"
   const initMatch = lower.match(/saldo\s+awal\s+(tunai|gopay|mandiri)\s+([\d.,]+(?:\s*[a-z]+)?)/i);
   if (initMatch && initMatch[1] && initMatch[2]) {
     const wallet = detectWallet(initMatch[1]);

@@ -10,6 +10,7 @@ import { formatRupiah, parseRupiahAmount } from "../../services/ledger/math";
 import { env } from "../../config/env";
 import { EXPENSE_CATEGORIES } from "../../config/constants";
 import { callOllamaFallback } from "../../services/ai/ollama";
+import { GoogleCalendarService } from "../../services/calendar/google";
 
 const rawGroqKeys: string[] = [];
 if (env.GROQ_API_KEYS) {
@@ -38,20 +39,21 @@ export async function handleUserText(ctx: Context, text: string) {
   if (lower === "/start") {
     await ctx.reply(
       "👋 *Halo Arya! Saya Omni-Bot, asisten pribadi kamu.*\n\n" +
-      "Ketik apa saja secara kasual tanpa perlu mengingat perintah:\n\n" +
-      "👛 *Catat Transaksi*:\n" +
+      "Ketik apa saja secara santai tanpa perlu menghafal format perintah:\n\n" +
+      "👛 *Buku Kas & Transaksi*:\n" +
       "• _'kopi susu 18rb gopay'_\n" +
       "• _'makan soto ayam 25k tunai'_\n" +
-      "• _'dapat 100rb dari mama masuk mandiri'_\n\n" +
-      "🔄 *Pindah Saldo (Transfer)*:\n" +
+      "• _'dapat 100rb dari mama masuk mandiri'_\n" +
       "• _'transfer 50rb dari mandiri ke gopay'_\n" +
-      "• _'tarik tunai 100k dari mandiri'_\n\n" +
-      "📊 *Cek Saldo & Rekap*:\n" +
-      "• _'saldo'_ atau _'uangku tinggal berapa'_\n" +
-      "• _'rekap hari ini'_ atau _'pengeluaran minggu ini'_\n\n" +
-      "📋 *Log Obrolan Grup*:\n" +
-      "• Paste/forward log grup panjang -> saya rangkumkan TL;DR, daftar tugas (tugasmu di paling atas), dan jadwal ke Google Calendar.\n\n" +
-      "_Semua transaksi selalu ditampilkan sebagai draf terlebih dahulu untuk kamu setujui sebelum disimpan ke buku kas!_",
+      "• _'saldo'_ atau _'rekap bulan ini'_\n\n" +
+      "📅 *Jadwal & Agenda Kalender*:\n" +
+      "• _'saya lusa jam 10 ada sidang semhas'_\n" +
+      "• _'besok jam 2 siang ada bimbingan di kampus'_\n" +
+      "• _'apa jadwal terdekat saya?'_\n" +
+      "• _'senin depan apakah ada jadwal?'_\n\n" +
+      "📋 *Rangkum Obrolan Grup*:\n" +
+      "• Forward/paste chat grup panjang -> TL;DR, daftar tugas, dan draf agenda ke Google Calendar.\n\n" +
+      "_Semua transaksi dan agenda selalu ditampilkan sebagai draf konfirmasi terlebih dahulu sebelum disimpan._",
       { parse_mode: "Markdown" }
     );
     return;
@@ -293,6 +295,71 @@ async function executeActionCall(
     return true;
   }
 
+  if (fnName === "create_schedule_event") {
+    const draft = await DraftManager.createDraft(userId, "group_extraction", {
+      tldr: `Jadwal: ${args.title}`,
+      aryaTasks: [],
+      otherTasks: [],
+      events: [
+        {
+          title: args.title,
+          start_time: args.start_time,
+          end_time: args.end_time || undefined,
+          description: args.description || undefined,
+        },
+      ],
+    });
+
+    const timeFormatted = GoogleCalendarService.formatEventTimeWIB(args.start_time, args.end_time);
+    let card = `📅 *DRAF JADWAL BARU*\n\n`;
+    card += `📌 *Kegiatan*: ${args.title}\n`;
+    card += `⏰ *Waktu*: ${timeFormatted}\n`;
+    if (args.description) {
+      card += `📝 *Catatan*: ${args.description}\n`;
+    }
+    card += `\n_Simpan kegiatan ini ke Google Calendar kamu?_`;
+
+    await ctx.reply(card, {
+      parse_mode: "Markdown",
+      reply_markup: BotKeyboards.calendarEventSync(draft.id, 0),
+    });
+    return true;
+  }
+
+  if (fnName === "query_schedule") {
+    try {
+      const events = await GoogleCalendarService.listEvents({
+        timeMin: args.time_min || new Date().toISOString(),
+        timeMax: args.time_max || undefined,
+        maxResults: 10,
+      });
+
+      const label = args.label ? ` (${args.label})` : "";
+      let msg = `📅 *AGENDA & JADWAL GOOGLE CALENDAR*${label}\n\n`;
+
+      if (events.length === 0) {
+        msg += `_Tidak ada jadwal atau kegiatan yang tercatat pada rentang waktu ini._\n`;
+      } else {
+        for (let i = 0; i < events.length; i++) {
+          const ev = events[i];
+          const timeStr = GoogleCalendarService.formatEventTimeWIB(ev.start, ev.end);
+          msg += `${i + 1}. *${ev.title}*\n`;
+          msg += `   ⏰ ${timeStr}\n`;
+          if (ev.description) msg += `   📝 ${ev.description}\n`;
+          if (ev.htmlLink) msg += `   🔗 [Buka di Google Calendar](${ev.htmlLink})\n`;
+          msg += `\n`;
+        }
+      }
+
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+      return true;
+    } catch (calErr: any) {
+      console.error("[TextHandler] Failed to query Google Calendar:", calErr);
+      await ctx.reply(`❌ Gagal mengambil jadwal dari Google Calendar: ${calErr.message}`);
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -403,6 +470,35 @@ async function processWithDeterministic(ctx: Context, text: string, userId: stri
     msg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
 
     await ctx.reply(msg, { parse_mode: "Markdown" });
+    return;
+  }
+
+  if (result.intent === "schedule_query") {
+    try {
+      const events = await GoogleCalendarService.listEvents({
+        timeMin: new Date().toISOString(),
+        maxResults: 10,
+      });
+
+      let msg = `📅 *AGENDA & JADWAL GOOGLE CALENDAR* (${result.data.label})\n\n`;
+      if (events.length === 0) {
+        msg += `_Tidak ada jadwal atau kegiatan mendatang di Google Calendar kamu._\n`;
+      } else {
+        for (let i = 0; i < events.length; i++) {
+          const ev = events[i];
+          const timeStr = GoogleCalendarService.formatEventTimeWIB(ev.start, ev.end);
+          msg += `${i + 1}. *${ev.title}*\n`;
+          msg += `   ⏰ ${timeStr}\n`;
+          if (ev.description) msg += `   📝 ${ev.description}\n`;
+          if (ev.htmlLink) msg += `   🔗 [Buka di Google Calendar](${ev.htmlLink})\n`;
+          msg += `\n`;
+        }
+      }
+
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+    } catch (err: any) {
+      await ctx.reply(`❌ Gagal mengambil jadwal dari Google Calendar: ${err.message}`);
+    }
     return;
   }
 

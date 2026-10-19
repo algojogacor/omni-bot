@@ -155,4 +155,95 @@ export class GoogleCalendarService {
       throw err;
     }
   }
+
+  /**
+   * Lists upcoming events from Google Calendar
+   */
+  static async listEvents(options?: {
+    timeMin?: string;
+    timeMax?: string;
+    maxResults?: number;
+  }): Promise<
+    Array<{
+      id: string;
+      title: string;
+      description?: string;
+      start: string;
+      end: string;
+      htmlLink?: string;
+    }>
+  > {
+    const calendar = this.getClient();
+    const calendarId = env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
+
+    const response = await calendar.events.list({
+      calendarId,
+      timeMin: options?.timeMin || new Date().toISOString(),
+      timeMax: options?.timeMax,
+      maxResults: options?.maxResults || 10,
+      singleEvents: true,
+      orderBy: "startTime",
+      timeZone: TIMEZONE,
+    });
+
+    const items = response.data.items || [];
+    return items.map((item) => ({
+      id: item.id || "",
+      title: item.summary || "(Tanpa Judul)",
+      description: item.description || undefined,
+      start: item.start?.dateTime || item.start?.date || "",
+      end: item.end?.dateTime || item.end?.date || "",
+      htmlLink: item.htmlLink || undefined,
+    }));
+  }
+
+  /**
+   * Formats ISO date or datetime to readable Indonesian format in Asia/Jakarta
+   */
+  static formatEventTimeWIB(startStr: string, endStr?: string): string {
+    if (!startStr) return "-";
+
+    // Handle full-day date format (YYYY-MM-DD)
+    if (!startStr.includes("T")) {
+      const parts = startStr.split("-").map((v) => parseInt(v, 10));
+      if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+        const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+        const label = new Intl.DateTimeFormat("id-ID", {
+          timeZone: "UTC",
+          weekday: "long",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(d);
+        return `${label} (Sepanjang hari)`;
+      }
+      return startStr;
+    }
+
+    const startDate = new Date(startStr);
+    const dateLabel = new Intl.DateTimeFormat("id-ID", {
+      timeZone: TIMEZONE,
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(startDate);
+
+    const timeFormatter = new Intl.DateTimeFormat("id-ID", {
+      timeZone: TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    const startTimeLabel = timeFormatter.format(startDate).replace(".", ":");
+
+    if (endStr && endStr.includes("T")) {
+      const endDate = new Date(endStr);
+      const endTimeLabel = timeFormatter.format(endDate).replace(".", ":");
+      return `${dateLabel}, ${startTimeLabel} - ${endTimeLabel} WIB`;
+    }
+
+    return `${dateLabel}, ${startTimeLabel} WIB`;
+  }
 }

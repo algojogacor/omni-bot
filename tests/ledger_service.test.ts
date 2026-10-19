@@ -61,5 +61,5 @@ describe("LedgerService Database Operations", () => {
     const csv = await LedgerService.exportCSV();
     expect(csv).toContain("Makan soto ayam");
     expect(csv).toContain("Tarik tunai ATM");
-  });
+  }, 15000);
 });

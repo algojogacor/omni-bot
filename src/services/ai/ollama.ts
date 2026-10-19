@@ -2,7 +2,14 @@ import { env } from "../../config/env";
 import { buildSystemPrompt } from "../groq/tools";
 
 export interface OllamaResult {
-  function: "record_transaction" | "transfer_wallet" | "query_recap" | "summarize_group_log" | "unknown";
+  function:
+    | "record_transaction"
+    | "transfer_wallet"
+    | "query_recap"
+    | "summarize_group_log"
+    | "create_schedule_event"
+    | "query_schedule"
+    | "unknown";
   arguments: any;
 }
 
@@ -27,7 +34,11 @@ You MUST respond with a single valid JSON object representing the action to take
    {"function": "transfer_wallet", "arguments": {"from_wallet": string, "to_wallet": string, "amount": number, "description": string, "transaction_date": "YYYY-MM-DD"}}
 3. For balance/recap query:
    {"function": "query_recap", "arguments": {"period": "today"|"this_week"|"this_month"|"last_month"|null, "start_date": "YYYY-MM-DD"|null, "end_date": "YYYY-MM-DD"|null, "category": string|null, "keyword": string|null, "ask_balance": boolean}}
-4. For group log summary:
+4. For single schedule event input:
+   {"function": "create_schedule_event", "arguments": {"title": string, "start_time": "YYYY-MM-DDTHH:mm:ss+07:00", "end_time": string|null, "description": string|null, "is_deadline": boolean}}
+5. For schedule/agenda query:
+   {"function": "query_schedule", "arguments": {"time_min": string|null, "time_max": string|null, "label": string|null}}
+6. For group log summary:
    {"function": "summarize_group_log", "arguments": {"tldr": string, "arya_tasks": string[], "other_tasks": [{"person": string, "task": string}], "events": [{"title": string, "start_time": string, "end_time": string, "description": string}]}}
 
 Do NOT include any markdown code fences or conversational text outside the JSON.`;
