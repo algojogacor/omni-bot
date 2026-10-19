@@ -11,6 +11,8 @@ import { drafts, wallets, transactions, weeklyReports, calendarEvents } from "..
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware } from "../src/bot/middlewares/auth";
 import { dedupeMiddleware } from "../src/bot/middlewares/dedupe";
+import { handleUserText } from "../src/bot/handlers/text";
+import { BotKeyboards } from "../src/bot/keyboard";
 import { env } from "../src/config/env";
 
 describe("Omni-Bot End-to-End Behavioral Harness & Proof Suite", () => {
@@ -454,5 +456,39 @@ describe("Omni-Bot End-to-End Behavioral Harness & Proof Suite", () => {
 
     // Memory must remain reasonable (< 250 MB on local benchmark)
     expect(rssMB).toBeLessThan(250);
+  });
+
+  test("Area 0: Menu & Help Navigation Guide with Quick Actions", async () => {
+    let replyText = "";
+    let replyOpts: any = null;
+
+    const mockCtx = {
+      from: { id: parseInt(TEST_USER_ID, 10) },
+      reply: async (text: string, opts: any) => {
+        replyText = text;
+        replyOpts = opts;
+      },
+    } as any;
+
+    // Test /menu
+    await handleUserText(mockCtx, "/menu");
+    expect(replyText).toContain("PANDUAN LENGKAP & MENU OMNI-BOT");
+    expect(replyText).toContain("Buku Kas & Transaksi");
+    expect(replyText).toContain("Jadwal & Agenda Google Calendar");
+    expect(replyOpts?.reply_markup).toBeDefined();
+
+    // Test /help
+    await handleUserText(mockCtx, "/help");
+    expect(replyText).toContain("PANDUAN LENGKAP & MENU OMNI-BOT");
+
+    // Test Quick Keyboard Structure
+    const kb = BotKeyboards.quickMenu();
+    expect(kb.inline_keyboard.length).toBeGreaterThanOrEqual(3);
+    const flattened = kb.inline_keyboard.flat();
+    expect(flattened.some((btn) => btn.text.includes("Cek Saldo"))).toBe(true);
+    expect(flattened.some((btn) => btn.text.includes("Rekap"))).toBe(true);
+    expect(flattened.some((btn) => btn.text.includes("Mingguan"))).toBe(true);
+    expect(flattened.some((btn) => btn.text.includes("Jadwal"))).toBe(true);
+    expect(flattened.some((btn) => btn.text.includes("CSV"))).toBe(true);
   });
 });

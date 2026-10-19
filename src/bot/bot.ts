@@ -120,6 +120,21 @@ export function createBot(): Bot | null {
 export async function startBot(bot: Bot) {
   console.log("🤖 [Bot] Starting long polling...");
 
+  // Register interactive command menu in Telegram UI
+  try {
+    await bot.api.setMyCommands([
+      { command: "menu", description: "Buka panduan & menu tombol cepat" },
+      { command: "help", description: "Bantuan dan panduan penggunaan bot" },
+      { command: "saldo", description: "Cek saldo dompet kas" },
+      { command: "rekap", description: "Rekapitulasi pengeluaran bulan ini" },
+      { command: "jadwal", description: "Cek agenda kalender terdekat" },
+      { command: "mingguan", description: "Pratinjau ringkasan mingguan" },
+      { command: "csv", description: "Unduh cadangan data keuangan CSV" },
+    ]);
+  } catch (err: any) {
+    console.warn("[Bot] Could not register Telegram command menu:", err?.message);
+  }
+
   // Start Weekly proactive scheduler
   WeeklyScheduler.start(bot);
 

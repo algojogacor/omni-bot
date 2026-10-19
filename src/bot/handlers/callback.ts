@@ -1,6 +1,8 @@
-import { Context } from "grammy";
+import { Context, InputFile } from "grammy";
 import { DraftManager } from "../../services/draft/manager";
 import { GoogleCalendarService } from "../../services/calendar/google";
+import { LedgerService } from "../../services/ledger/service";
+import { WeeklyScheduler } from "../../services/scheduler/weekly";
 import { BotKeyboards } from "../keyboard";
 import { formatRupiah } from "../../services/ledger/math";
 import { db } from "../../db";
@@ -268,5 +270,79 @@ export async function handleCallbackQuery(ctx: Context) {
       await ctx.reply(`❌ Gagal menghapus event: ${err.message}`);
     }
     return;
+  }
+
+  // 11. Quick Menu Actions
+  if (action === "menu_action" && parts[1]) {
+    const subAction = parts[1];
+
+    if (subAction === "balance") {
+      const wallets = await LedgerService.getWallets();
+      let totalKas = 0;
+      let msg = `👛 *INFORMASI SALDO KAS*\n\n`;
+      for (const w of wallets) {
+        msg += `• *${w.name}*: ${formatRupiah(w.balance)}\n`;
+        totalKas += w.balance;
+      }
+      msg += `\n👉 *Total Kas*: ${formatRupiah(totalKas)}`;
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (subAction === "recap_month") {
+      const recap = await LedgerService.getRecap({ period: "this_month" });
+      let msg = `📊 *REKAP PENGELUARAN BULAN INI*\n`;
+      msg += `📅 Periode: ${recap.dateRangeLabel}\n\n`;
+      msg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
+      msg += `• Total Pengeluaran: ${formatRupiah(recap.totalExpense)}\n`;
+      msg += `• Tabungan Bersih: ${formatRupiah(recap.netSavings)}\n\n`;
+      if (Object.keys(recap.categoryBreakdown).length > 0) {
+        msg += `*Rincian Kategori*:\n`;
+        for (const [cat, amt] of Object.entries(recap.categoryBreakdown)) {
+          msg += `• ${cat}: ${formatRupiah(amt)}\n`;
+        }
+      }
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (subAction === "weekly") {
+      const weeklyMsg = await WeeklyScheduler.generateReportMessage({ isManual: true });
+      await ctx.reply(weeklyMsg, { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (subAction === "schedule") {
+      try {
+        const events = await GoogleCalendarService.listEvents({ maxResults: 5 });
+        let msg = `📅 *AGENDA & JADWAL TERDEKAT*\n\n`;
+        if (events.length === 0) {
+          msg += `_Tidak ada jadwal atau kegiatan yang tercatat dalam waktu dekat._`;
+        } else {
+          for (let i = 0; i < events.length; i++) {
+            const ev = events[i];
+            const timeStr = GoogleCalendarService.formatEventTimeWIB(ev.start, ev.end);
+            msg += `${i + 1}. *${ev.title}*\n   ⏰ ${timeStr}\n`;
+            if (ev.htmlLink) msg += `   🔗 [Buka di Google Calendar](${ev.htmlLink})\n`;
+            msg += `\n`;
+          }
+        }
+        await ctx.reply(msg, { parse_mode: "Markdown" });
+      } catch (err: any) {
+        await ctx.reply(`❌ Gagal mengambil agenda: ${err.message}`);
+      }
+      return;
+    }
+
+    if (subAction === "csv") {
+      const csvContent = await LedgerService.exportCSV();
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const buffer = Buffer.from(csvContent, "utf-8");
+      await ctx.replyWithDocument(new InputFile(buffer, `omni-bot-keuangan-${dateStr}.csv`), {
+        caption: `📁 Berikut cadangan data keuangan kamu per tanggal *${dateStr}*.`,
+        parse_mode: "Markdown",
+      });
+      return;
+    }
   }
 }

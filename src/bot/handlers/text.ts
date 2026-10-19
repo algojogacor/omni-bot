@@ -88,34 +88,101 @@ export async function handleUserText(ctx: Context, text: string) {
   const userId = ctx.from?.id?.toString() || "";
   const lower = text.trim().toLowerCase();
 
-  // 0. Check /start command
-  if (lower === "/start") {
+  // 0. Check /start, /menu, /help, panduan, bantuan commands
+  if (/^(?:\/(?:start|menu|help|panduan|bantuan)|menu|help|panduan|bantuan)$/i.test(lower)) {
     await safeReply(
       ctx,
-      "👋 *Halo Arya! Saya Omni-Bot, asisten pribadi kamu.*\n\n" +
-      "Ketik apa saja secara santai tanpa perlu menghafal format perintah:\n\n" +
-      "👛 *Buku Kas & Transaksi*:\n" +
+      "📖 *PANDUAN LENGKAP & MENU OMNI-BOT*\n\n" +
+      "Omni-Bot dirancang agar kamu bisa mengetik santai apa adanya tanpa perlu menghafal format perintah kaku:\n\n" +
+      "👛 *1. Buku Kas & Transaksi*\n" +
       "• _'kopi susu 18rb gopay'_\n" +
-      "• _'kopi 18rb, parkir 3rb, kas 20rb pake gopay'_\n" +
+      "• _'makan nasi padang 25k'_ (bot akan tanya dompet jika belum disebut)\n" +
       "• _'keluar seratus ribu dari mandiri'_\n" +
-      "• _'dapat 100rb dari mama masuk mandiri'_\n" +
+      "• _'dapat kiriman 500rb dari ortu masuk mandiri'_\n\n" +
+      "🛒 *2. Transaksi Multi-Item & Koreksi*\n" +
+      "• _'kopi 18rb, parkir 3rb, kas 20rb pake gopay'_\n" +
+      "• Koreksi santai sebelum simpan: _'yang parkir harusnya 5rb, hapus kopinya'_\n\n" +
+      "🔄 *3. Transfer Antar Dompet*\n" +
       "• _'transfer 50rb dari mandiri ke gopay'_\n" +
-      "• _'saldo'_, _'rekap bulan ini'_, atau _'ringkasan mingguan'_\n\n" +
-      "📅 *Jadwal & Agenda Kalender*:\n" +
-      "• _'saya lusa jam 10 ada sidang semhas'_\n" +
-      "• _'besok jam 2 siang ada bimbingan di kampus'_\n" +
+      "• _'tarik tunai 100k dari mandiri'_\n\n" +
+      "📊 *4. Saldo & Rekapitulasi*\n" +
+      "• _'saldo'_ atau _'sisa uangku'_\n" +
+      "• _'pengeluaran kemarin berapa?'_\n" +
+      "• _'rekap bulan ini'_ / _'pengeluaran makanan minggu ini'_\n" +
+      "• _'ringkasan mingguan'_ (pratinjau laporan mingguan)\n\n" +
+      "📅 *5. Jadwal & Agenda Google Calendar*\n" +
+      "• _'saya lusa jam 10 pagi ada sidang semhas'_\n" +
+      "• _'besok jam 1 siang ada bimbingan di kampus'_\n" +
       "• _'apa jadwal terdekat saya?'_\n" +
-      "• _'senin depan apakah ada jadwal?'_\n\n" +
-      "📋 *Rangkum Obrolan Grup*:\n" +
-      "• Forward/paste chat grup panjang -> TL;DR, daftar tugas, dan draf agenda ke Google Calendar.\n\n" +
-      "_Semua transaksi dan agenda selalu ditampilkan sebagai draf konfirmasi terlebih dahulu sebelum disimpan._",
-      { parse_mode: "Markdown" }
+      "• _'senin depan ada kegiatan apa?'_\n\n" +
+      "📋 *6. Rangkuman Obrolan Grup*\n" +
+      "• Forward/paste chat grup panjang -> TL;DR, Tugas Arya di atas, tugas rekan lain, dan draf jadwal rapat.\n\n" +
+      "📁 *7. Cadangan Data*\n" +
+      "• Ketik _'unduh data'_, _'export csv'_, atau _/csv_\n\n" +
+      "_Tekan tombol di bawah untuk akses cepat:_ ",
+      {
+        parse_mode: "Markdown",
+        reply_markup: BotKeyboards.quickMenu(),
+      }
     );
     return;
   }
 
+  // 0b. Quick Shortcut Commands
+  if (lower === "/saldo") {
+    const wallets = await LedgerService.getWallets();
+    let totalKas = 0;
+    let msg = `👛 *INFORMASI SALDO KAS*\n\n`;
+    for (const w of wallets) {
+      msg += `• *${w.name}*: ${formatRupiah(w.balance)}\n`;
+      totalKas += w.balance;
+    }
+    msg += `\n👉 *Total Kas*: ${formatRupiah(totalKas)}`;
+    await safeReply(ctx, msg, { parse_mode: "Markdown" });
+    return;
+  }
+
+  if (lower === "/rekap") {
+    const recap = await LedgerService.getRecap({ period: "this_month" });
+    let msg = `📊 *REKAP PENGELUARAN BULAN INI*\n`;
+    msg += `📅 Periode: ${recap.dateRangeLabel}\n\n`;
+    msg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
+    msg += `• Total Pengeluaran: ${formatRupiah(recap.totalExpense)}\n`;
+    msg += `• Tabungan Bersih: ${formatRupiah(recap.netSavings)}\n\n`;
+    if (Object.keys(recap.categoryBreakdown).length > 0) {
+      msg += `*Rincian Kategori*:\n`;
+      for (const [cat, amt] of Object.entries(recap.categoryBreakdown)) {
+        msg += `• ${cat}: ${formatRupiah(amt)}\n`;
+      }
+    }
+    await safeReply(ctx, msg, { parse_mode: "Markdown" });
+    return;
+  }
+
+  if (lower === "/jadwal") {
+    try {
+      const events = await GoogleCalendarService.listEvents({ maxResults: 5 });
+      let msg = `📅 *AGENDA & JADWAL TERDEKAT*\n\n`;
+      if (events.length === 0) {
+        msg += `_Tidak ada jadwal atau kegiatan yang tercatat dalam waktu dekat._`;
+      } else {
+        for (let i = 0; i < events.length; i++) {
+          const ev = events[i];
+          const timeStr = GoogleCalendarService.formatEventTimeWIB(ev.start, ev.end);
+          msg += `${i + 1}. *${ev.title}*\n   ⏰ ${timeStr}\n`;
+          if (ev.htmlLink) msg += `   🔗 [Buka di Google Calendar](${ev.htmlLink})\n`;
+          msg += `\n`;
+        }
+      }
+      await safeReply(ctx, msg, { parse_mode: "Markdown" });
+    } catch (err: any) {
+      await safeReply(ctx, `❌ Gagal mengambil agenda: ${err.message}`);
+    }
+    return;
+  }
+
   // 1. Check CSV export command
-  if (/^(export\s+csv|unduh\s+(?:data|csv)|download\s+csv|cadangan)$/i.test(lower)) {
+  if (/^(export\s+csv|unduh\s+(?:data|csv)|download\s+csv|cadangan|\/csv)$/i.test(lower)) {
     const csvContent = await LedgerService.exportCSV();
     const dateStr = new Date().toISOString().slice(0, 10);
     const buffer = Buffer.from(csvContent, "utf-8");
@@ -127,7 +194,7 @@ export async function handleUserText(ctx: Context, text: string) {
   }
 
   // 1b. Check manual weekly report preview command (does not affect anti-duplicate tracking)
-  if (/^(?:ringkasan\s+mingguan(?:\s+manual)?|rekap\s+mingguan\s+manual|preview\s+mingguan|\/(?:rekap|ringkasan)_mingguan)$/i.test(lower)) {
+  if (/^(?:ringkasan\s+mingguan(?:\s+manual)?|rekap\s+mingguan\s+manual|preview\s+mingguan|\/(?:rekap|ringkasan)_mingguan|\/mingguan)$/i.test(lower)) {
     const reportMsg = await WeeklyScheduler.generateReportMessage({ isManual: true });
     await safeReply(ctx, reportMsg, { parse_mode: "Markdown" });
     return;

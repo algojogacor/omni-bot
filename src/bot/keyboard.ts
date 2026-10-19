@@ -90,4 +90,18 @@ export class BotKeyboards {
   static calendarEventSynced(googleEventId: string): InlineKeyboard {
     return new InlineKeyboard().text("🗑 Hapus dari Google Calendar", `del_gcal:${googleEventId}`);
   }
+
+  /**
+   * Quick action menu buttons for /menu and /help
+   */
+  static quickMenu(): InlineKeyboard {
+    return new InlineKeyboard()
+      .text("👛 Cek Saldo", "menu_action:balance")
+      .text("📊 Rekap Bulan Ini", "menu_action:recap_month")
+      .row()
+      .text("📈 Ringkasan Mingguan", "menu_action:weekly")
+      .text("📅 Jadwal Terdekat", "menu_action:schedule")
+      .row()
+      .text("📁 Unduh Data CSV", "menu_action:csv");
+  }
 }
