@@ -11,7 +11,7 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 
 # Install production dependencies
-RUN bun install --production --frozen-lockfile
+RUN bun install --production
 
 # Copy application source
 COPY tsconfig.json ./
