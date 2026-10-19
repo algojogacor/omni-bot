@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, afterAll } from "bun:test";
 import { DraftManager } from "../src/services/draft/manager";
 import { formatRupiah, isExtremeAmount } from "../src/services/ledger/math";
 import { parseDeterministicMessage } from "../src/services/parser/deterministic";
@@ -18,6 +18,10 @@ import { env } from "../src/config/env";
 describe("Omni-Bot End-to-End Behavioral Harness & Proof Suite", () => {
   const TEST_USER_ID = "6675963892";
   const UNAUTHORIZED_USER_ID = "9999999999";
+
+  afterAll(async () => {
+    await LedgerService.resetAllData();
+  });
 
   test("Area 1: Access Control - Unauthorized users are silently dropped", async () => {
     let nextCalled = false;

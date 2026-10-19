@@ -200,6 +200,20 @@ export async function handleUserText(ctx: Context, text: string) {
     return;
   }
 
+  // 1c. Check reset database command
+  if (/^(?:\/reset|reset\s+(?:data|semua|database)|reset)$/i.test(lower)) {
+    await LedgerService.resetAllData();
+    await safeReply(
+      ctx,
+      "🔄 *Seluruh data transaksi, draf, dan saldo telah di-reset ke Rp 0!*\n\n" +
+      "Omni-Bot sekarang siap kamu gunakan dari awal. Silakan atur saldo awal dompetmu, misalnya:\n" +
+      "• _'saldo awal mandiri 500rb, gopay 100rb, tunai 50rb'_\n" +
+      "• atau atur satu per satu: _'saldo awal tunai 100rb'_",
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
   // 2. Check if user is attempting a conversational edit or deletion on a pending draft
   const targetDraft = await DraftManager.findPendingDraftForCorrection(userId, text);
   if (targetDraft) {

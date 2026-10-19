@@ -1,6 +1,6 @@
 import { eq, and, gte, lte, like, desc } from "drizzle-orm";
 import { db } from "../../db";
-import { wallets, transactions, drafts } from "../../db/schema";
+import { wallets, transactions, drafts, calendarEvents, weeklyReports } from "../../db/schema";
 import { formatRupiah, getWIBDateRange, formatWIBDateLabel, PeriodType } from "./math";
 import { WALLETS, WalletName, ExpenseCategory } from "../../config/constants";
 
@@ -223,5 +223,16 @@ export class LedgerService {
     ]);
 
     return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  }
+
+  /**
+   * Resets all transactions, drafts, and zeroes out all wallet balances
+   */
+  static async resetAllData() {
+    await db.delete(transactions);
+    await db.delete(drafts);
+    await db.delete(calendarEvents);
+    await db.delete(weeklyReports);
+    await db.update(wallets).set({ balance: 0, updatedAt: new Date().toISOString() });
   }
 }

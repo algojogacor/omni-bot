@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { initDatabase, db } from "../src/db";
 import { LedgerService } from "../src/services/ledger/service";
 import { formatRupiah } from "../src/services/ledger/math";
@@ -6,6 +6,10 @@ import { formatRupiah } from "../src/services/ledger/math";
 describe("LedgerService Database Operations", () => {
   beforeAll(async () => {
     await initDatabase();
+  });
+
+  afterAll(async () => {
+    await LedgerService.resetAllData();
   });
 
   test("setInitialBalance and recordTransaction properly update wallets and recaps", async () => {
