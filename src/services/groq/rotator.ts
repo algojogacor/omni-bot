@@ -34,8 +34,8 @@ export class GroqRotator {
 
   constructor(options: RotatorOptions) {
     this.keys = (options.apiKeys || []).map((k) => k.trim()).filter((k) => k.length > 0);
-    this.primaryModel = options.primaryModel || "llama-3.3-70b-versatile";
-    this.fallbackModel = options.fallbackModel || "llama-3.1-8b-instant";
+    this.primaryModel = options.primaryModel || "qwen/qwen3.8-27b";
+    this.fallbackModel = options.fallbackModel || "openai/gpt-oss-120b";
     this.cooldownMs = (options.cooldownSeconds ?? 60) * 1000;
 
     for (const key of this.keys) {

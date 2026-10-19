@@ -13,7 +13,7 @@ Omni-Bot adalah bot Telegram pribadi (satu pengguna, tanpa slash command) untuk 
 | Hosting dan runtime | Koyeb free tier dengan Bun. Dites sejak awal; kalau CPU melonjak di 0.1 vCPU, pindah ke Node. |
 | Penerimaan pesan | Long polling, ditambah pinger eksternal tiap 5 menit ke /health. |
 | Database | Turso (libSQL) + Drizzle, database khusus bot ini. |
-| LLM | Groq (rotator multi-key, model utama llama-3.3-70b-versatile, fallback llama-3.1-8b-instant) + Ollama Cloud (gpt-oss:120b-cloud) sebagai fallback tambahan sebelum mode manual. |
+| LLM | Groq (rotator multi-key, model utama qwen/qwen3.8-27b, fallback openai/gpt-oss-120b) + Ollama Cloud (gpt-oss:120b-cloud) sebagai fallback tambahan sebelum mode manual. |
 | Konfirmasi | Semua transaksi dan event berupa draf yang harus disetujui dulu. |
 | Koreksi | Balas lewat chat biasa, ditambah tombol edit per item. |
 | Dompet | Tunai, GoPay, Bank Mandiri. Saldo dilacak per dompet. |
@@ -84,8 +84,8 @@ Bot hanya merespons satu akun Telegram (`ALLOWED_TELEGRAM_USER_ID`). Pesan dari 
 ### 3.8 Saat LLM tidak tersedia (Rantai Failover)
 
 - Rantai failover inferensi AI:
-  1. **Groq Primary**: `llama-3.3-70b-versatile` (dengan rotasi multi-key round-robin).
-  2. **Groq Fallback**: `llama-3.1-8b-instant` (saat semua key Groq pada model primary terkena cooldown).
+  1. **Groq Primary**: `qwen/qwen3.8-27b` (dengan rotasi multi-key round-robin; model terbaik dan sangat akurat memahami slang bahasa Indonesia serta native tool calling).
+  2. **Groq Fallback**: `openai/gpt-oss-120b` (saat semua key Groq pada model primary terkena cooldown).
   3. **Ollama Cloud**: `gpt-oss:120b-cloud` (fallback tingkat dua jika seluruh kuota Groq habis).
   4. **Mode Manual Deterministik**: Jika seluruh provider AI tidak tersedia, parser lokal regex & kamus bilangan kata bahasa Indonesia tetap memproses transaksi, transfer, cek saldo, dan rekap tanpa error. Log grup yang butuh penalaran AI ditolak sementara dengan pesan yang jelas.
 
@@ -99,7 +99,7 @@ Bot hanya merespons satu akun Telegram (`ALLOWED_TELEGRAM_USER_ID`). Pesan dari 
 
 - Bun + TypeScript, grammY untuk Telegram, server HTTP bawaan Bun untuk /health.
 - Turso (libSQL) + Drizzle. Tanpa engine binary, jadi lebih ringan dan cocok untuk Bun.
-- Groq dengan model utama yang kuat berbahasa Indonesia (`llama-3.3-70b-versatile`) dan model fallback yang lebih kecil (`llama-3.1-8b-instant`). Rotator menjalankan round-robin antar key, menaruh key yang kena limit dalam masa tunggu, dan pindah model kalau semua key terkena limit.
+- Groq dengan model utama `qwen/qwen3.8-27b` dan model fallback `openai/gpt-oss-120b`. Rotator menjalankan round-robin antar key, menaruh key yang kena limit dalam masa tunggu, dan pindah model kalau semua key terkena limit.
 - Ollama Cloud (`gpt-oss:120b-cloud`) sebagai lapis cadangan kedua jika seluruh kuota Groq habis, sebelum masuk ke parser deterministik offline.
 - Google Calendar terhubung langsung ke kalender utama Arya tanpa fallback diam-diam, dilengkapi fitur pembuatan event, pembatalan/penghapusan, dan pencarian agenda kegiatan mendatang.
 - Pemanggilan LLM memakai tool calling dengan tool yang terpisah dan jelas untuk: mencatat transaksi (pengeluaran dan pemasukan), transfer antar dompet, query rekap, draf event, dan query jadwal agenda.
