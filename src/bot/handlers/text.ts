@@ -340,10 +340,6 @@ async function processWithGroq(ctx: Context, text: string, userId: string): Prom
 
   return handled;
 }
-      await ctx.reply(message.content);
-    }
-  });
-}
 
 /**
  * Handles message via Deterministic offline regex parser
