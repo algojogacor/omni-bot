@@ -11,6 +11,7 @@ import { env } from "../../config/env";
 import { EXPENSE_CATEGORIES } from "../../config/constants";
 import { callOllamaFallback } from "../../services/ai/ollama";
 import { GoogleCalendarService } from "../../services/calendar/google";
+import { WeeklyScheduler } from "../../services/scheduler/weekly";
 
 /**
  * Safely sends a message to Telegram, chunking if length exceeds 4000 characters
@@ -99,7 +100,7 @@ export async function handleUserText(ctx: Context, text: string) {
       "• _'keluar seratus ribu dari mandiri'_\n" +
       "• _'dapat 100rb dari mama masuk mandiri'_\n" +
       "• _'transfer 50rb dari mandiri ke gopay'_\n" +
-      "• _'saldo'_ atau _'rekap bulan ini'_\n\n" +
+      "• _'saldo'_, _'rekap bulan ini'_, atau _'ringkasan mingguan'_\n\n" +
       "📅 *Jadwal & Agenda Kalender*:\n" +
       "• _'saya lusa jam 10 ada sidang semhas'_\n" +
       "• _'besok jam 2 siang ada bimbingan di kampus'_\n" +
@@ -122,6 +123,13 @@ export async function handleUserText(ctx: Context, text: string) {
       caption: `📁 Berikut cadangan data riwayat keuangan kamu per tanggal *${dateStr}*.`,
       parse_mode: "Markdown",
     });
+    return;
+  }
+
+  // 1b. Check manual weekly report preview command (does not affect anti-duplicate tracking)
+  if (/^(?:ringkasan\s+mingguan(?:\s+manual)?|rekap\s+mingguan\s+manual|preview\s+mingguan|\/(?:rekap|ringkasan)_mingguan)$/i.test(lower)) {
+    const reportMsg = await WeeklyScheduler.generateReportMessage({ isManual: true });
+    await safeReply(ctx, reportMsg, { parse_mode: "Markdown" });
     return;
   }
 

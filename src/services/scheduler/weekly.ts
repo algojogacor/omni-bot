@@ -85,39 +85,7 @@ export class WeeklyScheduler {
 
     console.log(`[WeeklyScheduler] Generating weekly financial report for ${yearWeek}...`);
 
-    // Generate recap for this week
-    const recap = await LedgerService.getRecap({ period: "this_week" });
-    const wallets = await LedgerService.getWallets();
-
-    // Find highest expense category
-    let topCategory = "-";
-    let topCategoryAmount = 0;
-    for (const [cat, amt] of Object.entries(recap.categoryBreakdown)) {
-      if (amt > topCategoryAmount) {
-        topCategoryAmount = amt;
-        topCategory = cat;
-      }
-    }
-
-    let reportMsg = `📊 *RINGKASAN MINGGUAN KEUANGAN*\n`;
-    reportMsg += `📅 Periode: ${recap.dateRangeLabel}\n\n`;
-
-    reportMsg += `👛 *SALDO PER DOMPET*:\n`;
-    let totalAllWallets = 0;
-    for (const w of wallets) {
-      reportMsg += `• ${w.name}: ${formatRupiah(w.balance)}\n`;
-      totalAllWallets += w.balance;
-    }
-    reportMsg += `👉 *Total Kas*: ${formatRupiah(totalAllWallets)}\n\n`;
-
-    reportMsg += `📈 *MUTASI MINGGU INI*:\n`;
-    reportMsg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
-    reportMsg += `• Total Pengeluaran: ${formatRupiah(recap.totalExpense)}\n`;
-    reportMsg += `• Tabungan Bersih: ${formatRupiah(recap.netSavings)}\n`;
-    if (topCategoryAmount > 0) {
-      reportMsg += `• Kategori Terbesar: ${topCategory} (${formatRupiah(topCategoryAmount)})\n`;
-    }
-    reportMsg += `\n_Semangat menjalani perkuliahan dan aktivitas minggu depan, Arya!_ 🚀`;
+    const reportMsg = await this.generateReportMessage({ isManual: false });
 
     try {
       await bot.api.sendMessage(env.ALLOWED_TELEGRAM_USER_ID, reportMsg, {
@@ -136,5 +104,54 @@ export class WeeklyScheduler {
     } catch (err) {
       console.error(`❌ [WeeklyScheduler] Failed to send report:`, err);
     }
+  }
+
+  /**
+   * Generates formatted weekly financial report message without affecting anti-duplicate tracking
+   */
+  static async generateReportMessage(options?: { isManual?: boolean }): Promise<string> {
+    const recap = await LedgerService.getRecap({ period: "this_week" });
+    const wallets = await LedgerService.getWallets();
+
+    // Find highest expense category
+    let topCategory = "-";
+    let topCategoryAmount = 0;
+    for (const [cat, amt] of Object.entries(recap.categoryBreakdown)) {
+      if (amt > topCategoryAmount) {
+        topCategoryAmount = amt;
+        topCategory = cat;
+      }
+    }
+
+    const title = options?.isManual
+      ? `📊 *RINGKASAN MINGGUAN KEUANGAN (PRATINJAU MANUAL)*\n`
+      : `📊 *RINGKASAN MINGGUAN KEUANGAN*\n`;
+
+    let reportMsg = title;
+    reportMsg += `📅 Periode: ${recap.dateRangeLabel}\n\n`;
+
+    reportMsg += `👛 *SALDO PER DOMPET*:\n`;
+    let totalAllWallets = 0;
+    for (const w of wallets) {
+      reportMsg += `• ${w.name}: ${formatRupiah(w.balance)}\n`;
+      totalAllWallets += w.balance;
+    }
+    reportMsg += `👉 *Total Kas*: ${formatRupiah(totalAllWallets)}\n\n`;
+
+    reportMsg += `📈 *MUTASI MINGGU INI*:\n`;
+    reportMsg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
+    reportMsg += `• Total Pengeluaran: ${formatRupiah(recap.totalExpense)}\n`;
+    reportMsg += `• Tabungan Bersih: ${formatRupiah(recap.netSavings)}\n`;
+    if (topCategoryAmount > 0) {
+      reportMsg += `• Kategori Terbesar: ${topCategory} (${formatRupiah(topCategoryAmount)})\n`;
+    }
+
+    if (options?.isManual) {
+      reportMsg += `\n_Catatan: Ini adalah pratinjau manual. Jadwal otomatis Minggu malam (20.00 WIB) tetap akan berjalan normal._`;
+    } else {
+      reportMsg += `\n_Semangat menjalani perkuliahan dan aktivitas minggu depan, Arya!_ 🚀`;
+    }
+
+    return reportMsg;
   }
 }

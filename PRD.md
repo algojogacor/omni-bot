@@ -13,7 +13,7 @@ Omni-Bot adalah bot Telegram pribadi (satu pengguna, tanpa slash command) untuk 
 | Hosting dan runtime | Koyeb free tier dengan Bun. Dites sejak awal; kalau CPU melonjak di 0.1 vCPU, pindah ke Node. |
 | Penerimaan pesan | Long polling, ditambah pinger eksternal tiap 5 menit ke /health. |
 | Database | Turso (libSQL) + Drizzle, database khusus bot ini. |
-| LLM | Groq. Rotator multi-key dari beberapa akun, dengan fallback model saat kena limit. |
+| LLM | Groq (rotator multi-key, model utama llama-3.3-70b-versatile, fallback llama-3.1-8b-instant) + Ollama Cloud (gpt-oss:120b-cloud) sebagai fallback tambahan sebelum mode manual. |
 | Konfirmasi | Semua transaksi dan event berupa draf yang harus disetujui dulu. |
 | Koreksi | Balas lewat chat biasa, ditambah tombol edit per item. |
 | Dompet | Tunai, GoPay, Bank Mandiri. Saldo dilacak per dompet. |
@@ -24,10 +24,10 @@ Omni-Bot adalah bot Telegram pribadi (satu pengguna, tanpa slash command) untuk 
 | Log panjang | Tanpa chunking. Ukuran diperkirakan dulu, dan kalau terlalu besar bot membalas dengan pesan jelas. |
 | Debounce | Semua pesan ditunggu 1,5 detik sebelum diproses. |
 | Log grup | TL;DR, semua tugas per orang dengan tugas Arya disorot di atas, jadwal menjadi draf event. Teks mentah tidak disimpan. |
-| Kalender | Service Account. Draf event bisa diedit, dan event yang sudah ter-sync bisa dihapus dari Google Calendar. |
-| Saat kuota LLM habis | Mode manual: parser sederhana tanpa LLM plus tombol edit. |
+| Kalender | Service Account langsung ke kalender utama Arya (aryarizkyardhipratama@gmail.com). Dilarang fallback diam-diam ke kalender lain. Mendukung sinkronisasi event, hapus event, dan tanya agenda live. |
+| Saat kuota LLM habis | Mode manual: parser deterministik regex dan kamus angka kata bahasa Indonesia tanpa LLM. |
 | Operasional | Notifikasi error ke Telegram Arya dan perintah export CSV. |
-| Proaktif | Ringkasan mingguan otomatis. |
+| Proaktif & Manual | Ringkasan mingguan otomatis Minggu malam (20.00 WIB) dengan anti-dobel berbasis database, plus pemicu manual kapan saja tanpa memengaruhi pencatatan otomatis. |
 
 ## 3. Perilaku produk
 
@@ -69,20 +69,25 @@ Bot hanya merespons satu akun Telegram (`ALLOWED_TELEGRAM_USER_ID`). Pesan dari 
 
 ### 3.6 Google Calendar
 
-- Autentikasi lewat Service Account. Kalender pribadi Arya harus dibagikan ke email service account dengan izin mengubah event; tanpa itu penyimpanan event akan gagal.
+- Autentikasi lewat Service Account ke kalender utama Arya (`aryarizkyardhipratama@gmail.com`). Kalender utama harus dibagikan ke email service account dengan izin "Make changes and see all event details".
+- Dilarang keras melakukan fallback diam-diam ke kalender lain. Jika kalender utama tidak dapat diakses, bot harus gagal dengan pesan yang jelas dan mengirim notifikasi error ke Telegram Arya.
 - Draf event bisa diedit (chat atau tombol) sebelum disinkronkan. Kalau durasi tidak disebut, asumsikan 1 jam (30 menit untuk tenggat tugas).
 - Setelah ter-sync, event bisa dihapus lewat tombol, dan bot menghapusnya juga dari Google Calendar.
+- Fitur baca agenda: Arya bisa menanyakan jadwal terdekat atau agenda periode tertentu lewat chat santai ("apa jadwal terdekat saya?", "senin depan ada kegiatan apa?"), dan bot membaca agenda langsung dari Google Calendar.
 
 ### 3.7 Ringkasan mingguan
 
-- Bot mengirim ringkasan otomatis sekali seminggu (asumsi awal: Minggu malam sekitar pukul 20.00 WIB): saldo per dompet, total pemasukan dan pengeluaran minggu itu, dan kategori terbesar.
-- Pengiriman harus aman terhadap restart atau tidur instance: catat minggu mana yang sudah terkirim, dan kejar saat instance hidup lagi tanpa mengirim dobel.
+- Bot mengirim ringkasan otomatis sekali seminggu (Minggu malam sekitar pukul 20.00 WIB): saldo per dompet, total pemasukan dan pengeluaran minggu itu, dan kategori terbesar.
+- Pengiriman harus aman terhadap restart atau tidur instance: catat minggu mana yang sudah terkirim di tabel `weekly_reports`, dan kejar saat instance hidup lagi tanpa mengirim dobel.
+- Tersedia pemicu manual lewat perintah santai ("ringkasan mingguan", "preview mingguan", "/rekap_mingguan") untuk melihat pratinjau ringkasan mingguan kapan saja tanpa mempengaruhi pencatatan anti-dobel otomatis.
 
-### 3.8 Saat LLM tidak tersedia
+### 3.8 Saat LLM tidak tersedia (Rantai Failover)
 
-- Kalau semua key Groq kehabisan kuota hari itu, bot memberi tahu "LLM sedang habis".
-- Pesan sederhana seperti "kopi 18rb gopay" tetap dibaca dengan parser deterministik tanpa LLM, lalu ditampilkan sebagai draf yang bisa diedit lewat tombol.
-- Pesan yang rumit (log grup) ditolak sementara dengan pesan yang jelas.
+- Rantai failover inferensi AI:
+  1. **Groq Primary**: `llama-3.3-70b-versatile` (dengan rotasi multi-key round-robin).
+  2. **Groq Fallback**: `llama-3.1-8b-instant` (saat semua key Groq pada model primary terkena cooldown).
+  3. **Ollama Cloud**: `gpt-oss:120b-cloud` (fallback tingkat dua jika seluruh kuota Groq habis).
+  4. **Mode Manual Deterministik**: Jika seluruh provider AI tidak tersedia, parser lokal regex & kamus bilangan kata bahasa Indonesia tetap memproses transaksi, transfer, cek saldo, dan rekap tanpa error. Log grup yang butuh penalaran AI ditolak sementara dengan pesan yang jelas.
 
 ### 3.9 Operasional
 
@@ -94,8 +99,10 @@ Bot hanya merespons satu akun Telegram (`ALLOWED_TELEGRAM_USER_ID`). Pesan dari 
 
 - Bun + TypeScript, grammY untuk Telegram, server HTTP bawaan Bun untuk /health.
 - Turso (libSQL) + Drizzle. Tanpa engine binary, jadi lebih ringan dan cocok untuk Bun.
-- Groq dengan model utama yang kuat berbahasa Indonesia dan model fallback yang lebih kecil. Rotator menjalankan round-robin antar key, menaruh key yang kena limit dalam masa tunggu, dan pindah model kalau semua key terkena limit.
-- Pemanggilan LLM memakai tool calling dengan tool yang terpisah dan jelas untuk: mencatat transaksi (pengeluaran dan pemasukan), transfer antar dompet, query rekap, dan draf event. Memisahkan transfer dari transaksi biasa mengurangi risiko LLM bingung.
+- Groq dengan model utama yang kuat berbahasa Indonesia (`llama-3.3-70b-versatile`) dan model fallback yang lebih kecil (`llama-3.1-8b-instant`). Rotator menjalankan round-robin antar key, menaruh key yang kena limit dalam masa tunggu, dan pindah model kalau semua key terkena limit.
+- Ollama Cloud (`gpt-oss:120b-cloud`) sebagai lapis cadangan kedua jika seluruh kuota Groq habis, sebelum masuk ke parser deterministik offline.
+- Google Calendar terhubung langsung ke kalender utama Arya tanpa fallback diam-diam, dilengkapi fitur pembuatan event, pembatalan/penghapusan, dan pencarian agenda kegiatan mendatang.
+- Pemanggilan LLM memakai tool calling dengan tool yang terpisah dan jelas untuk: mencatat transaksi (pengeluaran dan pemasukan), transfer antar dompet, query rekap, draf event, dan query jadwal agenda.
 - Telegram bisa mengirim ulang update, jadi update yang sudah diproses harus dikenali (dedupe), dan event kalender tidak boleh tercatat dobel.
 - Balasan harus aman diparse Telegram (hindari Markdown mentah dari LLM yang sering merusak format) dan dipecah kalau melebihi batas panjang pesan.
 - Tangani tool call yang malformed dari model dengan retry, bukan error mentah ke pengguna.

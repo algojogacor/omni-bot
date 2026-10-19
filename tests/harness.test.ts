@@ -261,39 +261,71 @@ describe("Omni-Bot End-to-End Behavioral Harness & Proof Suite", () => {
     }
   });
 
-  test("Area 7: Google Calendar Live API Verification (Create, Sync Idempotency, Delete)", async () => {
-    // Check if Google credentials are configured
+  test("Area 7: Google Calendar Live API Verification on Primary Calendar (Create, Verify, Delete)", async () => {
+    const primaryId = GoogleCalendarService.getPrimaryCalendarId();
+    expect(primaryId).toBe("aryarizkyardhipratama@gmail.com");
+
     const testTitle = `[TES] Sidang Semhas QA Omni-Bot ${Date.now()}`;
     const startTime = new Date(Date.now() + 86400000).toISOString(); // Tomorrow
 
-    // 1. Create Live Event
+    // 1. Create Live Event directly on primary calendar
     const created = await GoogleCalendarService.createEvent({
       title: testTitle,
       startTime,
-      description: "Automated behavioral verification event. Safe to delete.",
+      description: "Automated behavioral verification event on primary calendar. Safe to delete.",
     });
 
     expect(created).toBeDefined();
     expect(created.eventId).toBeDefined();
     expect(typeof created.eventId).toBe("string");
 
-    // 2. Verify event exists in Google Calendar list
+    // 2. Verify event exists in Google Calendar list on primary calendar
     const list = await GoogleCalendarService.listEvents({
       timeMin: new Date().toISOString(),
     });
     const found = list.some((e) => e.title === testTitle);
     expect(found).toBe(true);
 
-    // 3. Clean up: Delete event from Google Calendar
+    // 3. Clean up: Delete event from primary calendar
     const deleted = await GoogleCalendarService.deleteEvent(created.eventId);
     expect(deleted).toBe(true);
 
-    // 4. Verify event is gone
+    // 4. Verify event is completely gone
     const listAfter = await GoogleCalendarService.listEvents({
       timeMin: new Date().toISOString(),
     });
     const foundAfter = listAfter.some((e) => e.title === testTitle);
     expect(foundAfter).toBe(false);
+  });
+
+  test("Area 7: Google Calendar - Rejects Inaccessible Calendar Without Silent Fallback", async () => {
+    // Attempting to access an inaccessible calendar must throw and NOT fallback
+    let thrown = false;
+    let errorMessage = "";
+    try {
+      await GoogleCalendarService.getTargetCalendarId("inaccessible-calendar-qa-12345@gmail.com");
+    } catch (err: any) {
+      thrown = true;
+      errorMessage = err.message;
+    }
+
+    expect(thrown).toBe(true);
+    expect(errorMessage).toContain("tidak dapat diakses");
+  });
+
+  test("Area 10: Weekly Report - Manual Trigger Generates Preview Without Anti-Duplicate Block", async () => {
+    const initialReports = await db.select().from(weeklyReports).all();
+
+    // Generate manual preview
+    const previewText = await WeeklyScheduler.generateReportMessage({ isManual: true });
+    expect(typeof previewText).toBe("string");
+    expect(previewText).toContain("PRATINJAU MANUAL");
+    expect(previewText).toContain("Total Kas");
+    expect(previewText).toContain("Jadwal otomatis Minggu malam (20.00 WIB) tetap akan berjalan");
+
+    // Check that NO record was written to weeklyReports table
+    const postReports = await db.select().from(weeklyReports).all();
+    expect(postReports.length).toBe(initialReports.length);
   });
 
   test("Area 10: Weekly Proactive Report - No Duplicate Sent Across Restarts", async () => {

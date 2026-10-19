@@ -20,7 +20,7 @@ export class GoogleCalendarService {
 
   private static getClient(): calendar_v3.Calendar {
     let clientEmail = env.GOOGLE_CLIENT_EMAIL;
-    let privateKey = env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    let privateKey = env.GOOGLE_PRIVATE_KEY?.replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
 
     // 1. Try dedicated GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY env vars
     if (clientEmail && privateKey) {
@@ -85,60 +85,43 @@ export class GoogleCalendarService {
     return this.calendarClient;
   }
 
-  private static cachedCalendarId: string | null = null;
+  static getPrimaryCalendarId(): string {
+    return env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
+  }
 
   /**
-   * Resolves the target Google Calendar ID.
-   * If the preferred calendar ID is not accessible, falls back to any accessible shared calendar.
+   * Strictly resolves the target calendar ID without silent fallback to other calendars.
+   * Throws a descriptive error if the calendar is not accessible.
    */
-  static async resolveCalendarId(): Promise<string> {
-    if (this.cachedCalendarId) return this.cachedCalendarId;
-
+  static async getTargetCalendarId(calendarId?: string): Promise<string> {
+    const targetId = calendarId || this.getPrimaryCalendarId();
     const calendar = this.getClient();
-    const preferredId = env.GOOGLE_CALENDAR_ID || "aryarizkyardhipratama@gmail.com";
 
-    // 1. Try preferred ID
     try {
-      await calendar.calendars.get({ calendarId: preferredId });
-      this.cachedCalendarId = preferredId;
-      return preferredId;
+      await calendar.calendars.get({ calendarId: targetId });
+      return targetId;
     } catch (err: any) {
-      console.warn(
-        `[GCal] Preferred calendar '${preferredId}' not directly accessible (${err?.message}). Searching accessible shared calendars...`
-      );
+      const clientEmail = env.GOOGLE_CLIENT_EMAIL || "omnibot-calendar@mesin-cuan-en-horror.iam.gserviceaccount.com";
+      const errorMsg = `Kalender utama '${targetId}' tidak dapat diakses (${err?.message || "Not Found"}). Pastikan kalender telah dibagikan ke Service Account '${clientEmail}' dengan izin 'Make changes and see all event details'.`;
+      console.error(`[GCal] ${errorMsg}`);
+      throw new Error(errorMsg);
     }
-
-    // 2. Search calendar list for any accessible calendar
-    try {
-      const list = await calendar.calendarList.list();
-      const items = list.data.items || [];
-      if (items.length > 0) {
-        const found =
-          items.find((c) => c.accessRole === "owner" || c.accessRole === "writer") || items[0];
-        if (found && found.id) {
-          console.log(`[GCal] Falling back to accessible shared calendar: '${found.summary}' (${found.id})`);
-          this.cachedCalendarId = found.id;
-          return found.id;
-        }
-      }
-    } catch (listErr: any) {
-      console.warn("[GCal] Could not query calendar list:", listErr?.message);
-    }
-
-    return preferredId;
   }
 
   /**
    * Creates an event in Arya's Google Calendar
    */
-  static async createEvent(payload: CalendarEventPayload): Promise<{
+  static async createEvent(
+    payload: CalendarEventPayload,
+    calendarId?: string
+  ): Promise<{
     eventId: string;
     htmlLink?: string;
     startTime: string;
     endTime: string;
   }> {
     const calendar = this.getClient();
-    const calendarId = await this.resolveCalendarId();
+    const targetCalendarId = await this.getTargetCalendarId(calendarId);
 
     const startDate = new Date(payload.startTime);
     let endDate: Date;
@@ -153,7 +136,7 @@ export class GoogleCalendarService {
     }
 
     const response = await calendar.events.insert({
-      calendarId,
+      calendarId: targetCalendarId,
       requestBody: {
         summary: payload.title,
         description: payload.description || "Dibuat otomatis oleh Omni-Bot",
@@ -182,13 +165,13 @@ export class GoogleCalendarService {
   /**
    * Deletes an event from Google Calendar
    */
-  static async deleteEvent(eventId: string): Promise<boolean> {
+  static async deleteEvent(eventId: string, calendarId?: string): Promise<boolean> {
     const calendar = this.getClient();
-    const calendarId = await this.resolveCalendarId();
+    const targetCalendarId = await this.getTargetCalendarId(calendarId);
 
     try {
       await calendar.events.delete({
-        calendarId,
+        calendarId: targetCalendarId,
         eventId,
       });
       return true;
@@ -206,6 +189,7 @@ export class GoogleCalendarService {
     timeMin?: string;
     timeMax?: string;
     maxResults?: number;
+    calendarId?: string;
   }): Promise<
     Array<{
       id: string;
@@ -217,10 +201,10 @@ export class GoogleCalendarService {
     }>
   > {
     const calendar = this.getClient();
-    const calendarId = await this.resolveCalendarId();
+    const targetCalendarId = await this.getTargetCalendarId(options?.calendarId);
 
     const response = await calendar.events.list({
-      calendarId,
+      calendarId: targetCalendarId,
       timeMin: options?.timeMin || new Date().toISOString(),
       timeMax: options?.timeMax,
       maxResults: options?.maxResults || 10,
