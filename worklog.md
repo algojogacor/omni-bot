@@ -42,4 +42,11 @@
 - [2026-10-19 11:34] Deployment kerangka awal Bun ke Koyeb (`usual-olwen` -> `omni-bot`) BERHASIL & HEALTHY.
   - Endpoint: `https://usual-olwen-algojogacorbgt-a2be655b.koyeb.app/health`
   - Hasil benchmark: RSS hanya 47.56 MB (dari kuota 512 MB), Heap Used 1.55 MB, uptime stabil.
-  - Kesimpulan: **Bun 1.4.3 terbukti sangat aman, ringan, dan stabil di instance Koyeb 0.1 vCPU**. Tidak perlu beralih ke Node.js.
+- [2026-10-19 11:35] Implementasi LedgerService, presisi integer Rupiah, dan kalkulasi saldo/rekap murni kode TypeScript (100% lulus unit & integration test).
+- [2026-10-19 11:36] Implementasi GroqRotator dengan round-robin multi-key, 429 rate limit cooldown, dan fallback model otomatis.
+- [2026-10-19 11:37] Implementasi parser offline deterministik berbasis regex saat kuota LLM habis.
+- [2026-10-19 11:38] Implementasi core bot grammY: dedupe update, debounce queue 1.5 detik untuk paste/forward chat panjang, dan sistem draf persetujuan di DB libSQL.
+- [2026-10-19 11:39] Implementasi Google Calendar Service Account (menggunakan `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, dan `GOOGLE_CALENDAR_ID`) serta tombol hapus event tersinkronisasi.
+- [2026-10-19 11:40] Implementasi WeeklyScheduler (laporan proaktif Minggu 20:00 WIB) dan ekspor CSV.
+- [2026-10-19 11:41] Seluruh test suite (16 tests across 6 files) 100% LULUS (`bun test`).
+- [2026-10-19 11:43] Deploy versi penuh ke Koyeb dan konfigurasi `TELEGRAM_BOT_TOKEN` baru: Bot aktif live di Koyeb sebagai `@OmniExpenseTracker_bot`.
