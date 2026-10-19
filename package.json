@@ -1,0 +1,29 @@
+{
+  "name": "omni-bot",
+  "version": "1.0.0",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "dotenv": "^18.0.8",
+    "drizzle-orm": "^0.45.4",
+    "googleapis": "^186.0.0",
+    "grammy": "^1.46.0",
+    "groq-sdk": "^1.6.0",
+    "zod": "^4.6.7"
+  }
+}
