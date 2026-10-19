@@ -9,12 +9,22 @@ import { BotKeyboards } from "../keyboard";
 import { formatRupiah, parseRupiahAmount } from "../../services/ledger/math";
 import { env } from "../../config/env";
 import { EXPENSE_CATEGORIES } from "../../config/constants";
+import { callOllamaFallback } from "../../services/ai/ollama";
 
-let groqRotator: GroqRotator | null = null;
+const rawGroqKeys: string[] = [];
 if (env.GROQ_API_KEYS) {
-  const keys = env.GROQ_API_KEYS.split(",").map((k) => k.trim()).filter((k) => k.length > 0);
+  rawGroqKeys.push(...env.GROQ_API_KEYS.split(",").map((k) => k.trim()).filter((k) => k.length > 0));
+}
+if (env.GROQ_API_KEY_PRIMARY) rawGroqKeys.push(env.GROQ_API_KEY_PRIMARY.trim());
+if (env.GROQ_API_KEY_SECONDARY) rawGroqKeys.push(env.GROQ_API_KEY_SECONDARY.trim());
+if (env.GROQ_API_KEY_1) rawGroqKeys.push(env.GROQ_API_KEY_1.trim());
+if (env.GROQ_API_KEY_2) rawGroqKeys.push(env.GROQ_API_KEY_2.trim());
+
+const groqKeys = Array.from(new Set(rawGroqKeys)).filter(Boolean);
+let groqRotator: GroqRotator | null = null;
+if (groqKeys.length > 0) {
   groqRotator = new GroqRotator({
-    apiKeys: keys,
+    apiKeys: groqKeys,
     primaryModel: env.GROQ_PRIMARY_MODEL,
     fallbackModel: env.GROQ_FALLBACK_MODEL,
   });
@@ -130,34 +140,170 @@ export async function handleUserText(ctx: Context, text: string) {
   // 4. Try Processing with Groq LLM
   if (groqRotator && groqRotator.getKeyCount() > 0) {
     try {
-      await processWithGroq(ctx, text, userId);
-      return;
+      const handled = await processWithGroq(ctx, text, userId);
+      if (handled) return;
     } catch (err) {
-      if (err instanceof QuotaExhaustedError) {
-        console.warn("[TextHandler] Groq quota exhausted across all keys and models. Falling back to deterministic mode.");
-        await ctx.reply(
-          "⚠️ *Kuota LLM (Groq) sedang habis hari ini.*\n" +
-          "Beralih otomatis ke *mode manual deterministik*. Pesan sederhana seperti _'kopi 18rb gopay'_ tetap bisa dicatat, namun rangkuman log grup belum dapat diproses.",
-          { parse_mode: "Markdown" }
-        );
-      } else {
-        console.error("[TextHandler] Unexpected Groq error:", err);
-        // Fall through to deterministic parser
-      }
+      console.warn("[TextHandler] Groq attempt failed, trying Ollama Cloud fallback:", err);
     }
   }
 
-  // 5. Deterministic Offline Parser Fallback
+  // 5. Try Processing with Ollama Cloud LLM Fallback
+  try {
+    const ollamaResult = await callOllamaFallback(text);
+    if (ollamaResult && ollamaResult.function !== "unknown") {
+      const handled = await executeActionCall(ctx, userId, ollamaResult.function, ollamaResult.arguments);
+      if (handled) return;
+    }
+  } catch (err) {
+    console.warn("[TextHandler] Ollama fallback failed, falling back to deterministic mode:", err);
+  }
+
+  // 6. Deterministic Offline Parser Fallback
   await processWithDeterministic(ctx, text, userId);
+}
+
+/**
+ * Handles action calls whether initiated by Groq or Ollama
+ */
+async function executeActionCall(
+  ctx: Context,
+  userId: string,
+  fnName: string,
+  args: any
+): Promise<boolean> {
+  if (fnName === "record_transaction") {
+    const draft = await DraftManager.createDraft(userId, "transaction", {
+      type: args.type || "expense",
+      amount: args.amount,
+      wallet: args.wallet || null,
+      category: args.category || "Lainnya",
+      description: args.description || "Catatan",
+      transactionDate: args.transaction_date || new Date().toISOString().slice(0, 10),
+    });
+
+    const card = DraftManager.formatDraftCard(draft);
+    const kb = !args.wallet
+      ? BotKeyboards.walletPicker(draft.id)
+      : BotKeyboards.draftConfirmation(draft.id);
+
+    await ctx.reply(card, { parse_mode: "Markdown", reply_markup: kb });
+    return true;
+  }
+
+  if (fnName === "transfer_wallet") {
+    const draft = await DraftManager.createDraft(userId, "transfer", {
+      fromWallet: args.from_wallet,
+      toWallet: args.to_wallet,
+      amount: args.amount,
+      description: args.description || `Transfer dari ${args.from_wallet} ke ${args.to_wallet}`,
+      transactionDate: args.transaction_date || new Date().toISOString().slice(0, 10),
+    });
+
+    const card = DraftManager.formatDraftCard(draft);
+    await ctx.reply(card, {
+      parse_mode: "Markdown",
+      reply_markup: BotKeyboards.draftConfirmation(draft.id),
+    });
+    return true;
+  }
+
+  if (fnName === "query_recap") {
+    const recap = await LedgerService.getRecap({
+      period: args.period,
+      startDate: args.start_date,
+      endDate: args.end_date || args.start_date,
+      category: args.category,
+      keyword: args.keyword,
+    });
+
+    let recapMsg = `📊 *REKAP KEUANGAN*\n`;
+    recapMsg += `📅 Rentang: ${recap.dateRangeLabel}\n`;
+    if (args.category) {
+      recapMsg += `🏷 Kategori: *${args.category}*\n`;
+    }
+    if (args.keyword) {
+      recapMsg += `🔍 Kata kunci: *${args.keyword}*\n`;
+    }
+    recapMsg += `\n`;
+
+    if (args.ask_balance) {
+      recapMsg += `👛 *SALDO PER DOMPET*:\n`;
+      let totalCash = 0;
+      for (const w of recap.currentWallets) {
+        recapMsg += `• ${w.name}: ${formatRupiah(w.balance)}\n`;
+        totalCash += w.balance;
+      }
+      recapMsg += `👉 *Total Uang*: ${formatRupiah(totalCash)}\n\n`;
+    }
+
+    recapMsg += `• Total Pengeluaran: ${formatRupiah(recap.totalExpense)}\n`;
+    recapMsg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
+    if (recap.totalIncome > 0 || recap.totalExpense > 0) {
+      recapMsg += `• Sisa Bersih: ${formatRupiah(recap.netSavings)}\n`;
+    }
+
+    if (Object.keys(recap.categoryBreakdown).length > 0) {
+      recapMsg += `\n🏷 *Rincian Kategori*:\n`;
+      for (const [cat, amt] of Object.entries(recap.categoryBreakdown)) {
+        recapMsg += `• ${cat}: ${formatRupiah(amt)}\n`;
+      }
+    }
+
+    if (recap.recentTransactions.length > 0) {
+      recapMsg += `\n📝 *Daftar Transaksi*:\n`;
+      for (const tx of recap.recentTransactions) {
+        const sign = tx.type === "expense" ? "-" : "+";
+        recapMsg += `• ${tx.description}: ${sign}${formatRupiah(tx.amount)} (${tx.walletId})\n`;
+      }
+      if (recap.transactionsCount > recap.recentTransactions.length) {
+        recapMsg += `_...dan ${recap.transactionsCount - recap.recentTransactions.length} transaksi lainnya._\n`;
+      }
+    } else if (recap.totalExpense === 0 && recap.totalIncome === 0) {
+      recapMsg += `\n_Belum ada transaksi yang tercatat pada rentang waktu ini._\n`;
+    }
+
+    await ctx.reply(recapMsg, { parse_mode: "Markdown" });
+    return true;
+  }
+
+  if (fnName === "summarize_group_log") {
+    const draft = await DraftManager.createDraft(userId, "group_extraction", {
+      tldr: args.tldr,
+      aryaTasks: args.arya_tasks || [],
+      otherTasks: args.other_tasks || [],
+      events: args.events || [],
+    });
+
+    const summaryCard = GroupLogParser.formatSummaryCard(args);
+    await ctx.reply(summaryCard, { parse_mode: "Markdown" });
+
+    // If events exist, prompt with buttons to sync to Google Calendar
+    if (args.events && args.events.length > 0) {
+      for (let i = 0; i < args.events.length; i++) {
+        const ev = args.events[i];
+        await ctx.reply(
+          `📅 Draf Event #${i + 1}: *${ev.title}*\n⏰ ${ev.start_time}`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: BotKeyboards.calendarEventSync(draft.id, i),
+          }
+        );
+      }
+    }
+    return true;
+  }
+
+  return false;
 }
 
 /**
  * Handles message via Groq Tool Calling
  */
-async function processWithGroq(ctx: Context, text: string, userId: string) {
-  if (!groqRotator) return;
+async function processWithGroq(ctx: Context, text: string, userId: string): Promise<boolean> {
+  if (!groqRotator) return false;
 
   const systemPrompt = buildSystemPrompt();
+  let handled = false;
 
   await groqRotator.executeWithRetry(async ({ client, model }) => {
     const response = await client.chat.completions.create({
@@ -180,109 +326,20 @@ async function processWithGroq(ctx: Context, text: string, userId: string) {
         if (call.type !== "function") continue;
         const fnName = call.function.name;
         const args = JSON.parse(call.function.arguments);
-
-        if (fnName === "record_transaction") {
-          const draft = await DraftManager.createDraft(userId, "transaction", {
-            type: args.type || "expense",
-            amount: args.amount,
-            wallet: args.wallet || null,
-            category: args.category || "Lainnya",
-            description: args.description || "Catatan",
-            transactionDate: args.transaction_date || new Date().toISOString().slice(0, 10),
-          });
-
-          const card = DraftManager.formatDraftCard(draft);
-          const kb = !args.wallet
-            ? BotKeyboards.walletPicker(draft.id)
-            : BotKeyboards.draftConfirmation(draft.id);
-
-          await ctx.reply(card, { parse_mode: "Markdown", reply_markup: kb });
-          return;
-        }
-
-        if (fnName === "transfer_wallet") {
-          const draft = await DraftManager.createDraft(userId, "transfer", {
-            fromWallet: args.from_wallet,
-            toWallet: args.to_wallet,
-            amount: args.amount,
-            description: args.description || `Transfer dari ${args.from_wallet} ke ${args.to_wallet}`,
-            transactionDate: args.transaction_date || new Date().toISOString().slice(0, 10),
-          });
-
-          const card = DraftManager.formatDraftCard(draft);
-          await ctx.reply(card, {
-            parse_mode: "Markdown",
-            reply_markup: BotKeyboards.draftConfirmation(draft.id),
-          });
-          return;
-        }
-
-        if (fnName === "query_recap") {
-          const recap = await LedgerService.getRecap({
-            period: args.period,
-            category: args.category,
-            keyword: args.keyword,
-          });
-
-          let recapMsg = `📊 *REKAP KEUANGAN*\n`;
-          recapMsg += `📅 Rentang: ${recap.dateRangeLabel}\n\n`;
-
-          if (args.ask_balance) {
-            recapMsg += `👛 *SALDO PER DOMPET*:\n`;
-            let totalCash = 0;
-            for (const w of recap.currentWallets) {
-              recapMsg += `• ${w.name}: ${formatRupiah(w.balance)}\n`;
-              totalCash += w.balance;
-            }
-            recapMsg += `👉 *Total Uang*: ${formatRupiah(totalCash)}\n\n`;
-          }
-
-          recapMsg += `• Total Pengeluaran: ${formatRupiah(recap.totalExpense)}\n`;
-          recapMsg += `• Total Pemasukan: ${formatRupiah(recap.totalIncome)}\n`;
-          recapMsg += `• Sisa Bersih: ${formatRupiah(recap.netSavings)}\n`;
-
-          if (Object.keys(recap.categoryBreakdown).length > 0) {
-            recapMsg += `\n🏷 *Rincian Kategori*:\n`;
-            for (const [cat, amt] of Object.entries(recap.categoryBreakdown)) {
-              recapMsg += `• ${cat}: ${formatRupiah(amt)}\n`;
-            }
-          }
-
-          await ctx.reply(recapMsg, { parse_mode: "Markdown" });
-          return;
-        }
-
-        if (fnName === "summarize_group_log") {
-          const draft = await DraftManager.createDraft(userId, "group_extraction", {
-            tldr: args.tldr,
-            aryaTasks: args.arya_tasks || [],
-            otherTasks: args.other_tasks || [],
-            events: args.events || [],
-          });
-
-          const summaryCard = GroupLogParser.formatSummaryCard(args);
-          await ctx.reply(summaryCard, { parse_mode: "Markdown" });
-
-          // If events exist, prompt with buttons to sync to Google Calendar
-          if (args.events && args.events.length > 0) {
-            for (let i = 0; i < args.events.length; i++) {
-              const ev = args.events[i];
-              await ctx.reply(
-                `📅 Draf Event #${i + 1}: *${ev.title}*\n⏰ ${ev.start_time}`,
-                {
-                  parse_mode: "Markdown",
-                  reply_markup: BotKeyboards.calendarEventSync(draft.id, i),
-                }
-              );
-            }
-          }
-          return;
-        }
+        handled = await executeActionCall(ctx, userId, fnName, args);
+        if (handled) return;
       }
     }
 
     // Default conversational reply if no tool was called
-    if (message?.content) {
+    if (!handled && message?.content) {
+      await ctx.reply(message.content);
+      handled = true;
+    }
+  });
+
+  return handled;
+}
       await ctx.reply(message.content);
     }
   });

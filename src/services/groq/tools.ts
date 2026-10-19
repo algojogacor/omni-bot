@@ -80,18 +80,26 @@ export const GROQ_TOOLS = [
     type: "function" as const,
     function: {
       name: "query_recap",
-      description: "Menanyakan rekapitulasi keuangan (pengeluaran/pemasukan) atau menanyakan saldo saat ini.",
+      description: "Menanyakan rekapitulasi keuangan (pengeluaran/pemasukan) atau menanyakan saldo saat ini untuk periode atau tanggal tertentu.",
       parameters: {
         type: "object",
         properties: {
           period: {
             type: "string",
             enum: ["today", "this_week", "this_month", "last_month"],
-            description: "Periode rekap yang ditanyakan (hari ini, minggu ini, bulan ini, bulan lalu).",
+            description: "Periode umum rekap jika sesuai (hari ini, minggu ini, bulan ini, bulan lalu).",
+          },
+          start_date: {
+            type: "string",
+            description: "Tanggal awal transaksi dalam format YYYY-MM-DD (WIB). Gunakan tabel acuan tanggal jika menanyakan tanggal spesifik seperti 'kemarin', 'tanggal 15', 'senin kemarin', atau rentang tanggal.",
+          },
+          end_date: {
+            type: "string",
+            description: "Tanggal akhir transaksi dalam format YYYY-MM-DD (WIB). Untuk pertanyaan 1 hari spesifik, samakan nilainya dengan start_date.",
           },
           category: {
             type: "string",
-            description: "Filter kategori spesifik jika ditanya (misal 'Makanan').",
+            description: "Filter kategori spesifik jika ditanya (misal 'Makanan', 'Transport').",
           },
           keyword: {
             type: "string",

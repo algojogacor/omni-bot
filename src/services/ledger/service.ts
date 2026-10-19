@@ -1,7 +1,7 @@
 import { eq, and, gte, lte, like, desc } from "drizzle-orm";
 import { db } from "../../db";
 import { wallets, transactions, drafts } from "../../db/schema";
-import { formatRupiah, getWIBDateRange, PeriodType } from "./math";
+import { formatRupiah, getWIBDateRange, formatWIBDateLabel, PeriodType } from "./math";
 import { WALLETS, WalletName, ExpenseCategory } from "../../config/constants";
 
 export interface CreateTransactionParams {
@@ -136,7 +136,14 @@ export class LedgerService {
     } else if (options.startDate && options.endDate) {
       startStr = options.startDate;
       endStr = options.endDate;
-      label = `${startStr} sampai ${endStr}`;
+      label =
+        startStr === endStr
+          ? formatWIBDateLabel(startStr)
+          : `${formatWIBDateLabel(startStr)} sampai ${formatWIBDateLabel(endStr)}`;
+    } else if (options.startDate) {
+      startStr = options.startDate;
+      endStr = options.startDate;
+      label = formatWIBDateLabel(startStr);
     } else {
       const range = getWIBDateRange("this_month");
       startStr = range.startDateString;

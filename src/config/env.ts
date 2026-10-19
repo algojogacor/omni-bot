@@ -15,10 +15,19 @@ const envSchema = z.object({
   TURSO_DATABASE_URL: z.string().default("file:data/omni.db"),
   TURSO_AUTH_TOKEN: z.string().optional(),
 
-  // Groq multi-key (comma separated)
+  // Groq multi-key (comma separated or individual keys)
   GROQ_API_KEYS: z.string().optional(),
-  GROQ_PRIMARY_MODEL: z.string().default("llama-3.3-70b-versatile"),
-  GROQ_FALLBACK_MODEL: z.string().default("llama-3.1-8b-instant"),
+  GROQ_API_KEY_PRIMARY: z.string().optional(),
+  GROQ_API_KEY_SECONDARY: z.string().optional(),
+  GROQ_API_KEY_1: z.string().optional(),
+  GROQ_API_KEY_2: z.string().optional(),
+  GROQ_PRIMARY_MODEL: z.string().default("qwen/qwen3.8-27b"),
+  GROQ_FALLBACK_MODEL: z.string().default("openai/gpt-oss-120b"),
+
+  // Ollama Cloud (Second-tier LLM fallback)
+  OLLAMA_API_KEY_1: z.string().optional(),
+  OLLAMA_API_KEY_2: z.string().optional(),
+  OLLAMA_MODEL: z.string().default("gpt-oss:120b-cloud"),
 
   // Google Calendar Service Account
   GOOGLE_CLIENT_EMAIL: z.string().optional(),

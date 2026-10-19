@@ -155,3 +155,19 @@ export function getWIBDateRange(period: PeriodType, referenceDate = new Date()):
     label,
   };
 }
+
+/**
+ * Formats a YYYY-MM-DD date string into an Indonesian label, e.g. "Minggu, 18 Okt 2026"
+ */
+export function formatWIBDateLabel(dateStr: string): string {
+  const parts = dateStr.split("-").map((v) => parseInt(v, 10));
+  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return dateStr;
+  const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+}

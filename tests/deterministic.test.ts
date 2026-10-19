@@ -43,6 +43,34 @@ describe("Deterministic Offline Parser", () => {
     }
   });
 
+  test("parses recap queries for yesterday, specific date, and periods", () => {
+    const yesterday = parseDeterministicMessage("kemarin keluar berapa?");
+    expect(yesterday.intent).toBe("recap");
+    if (yesterday.intent === "recap") {
+      expect(yesterday.data.startDate).toBeDefined();
+      expect(yesterday.data.startDate).toBe(yesterday.data.endDate);
+    }
+
+    const specificDate = parseDeterministicMessage("pengeluaran tanggal 15 berapa?");
+    expect(specificDate.intent).toBe("recap");
+    if (specificDate.intent === "recap") {
+      expect(specificDate.data.startDate).toContain("-15");
+    }
+
+    const weekRecap = parseDeterministicMessage("rekap minggu ini");
+    expect(weekRecap.intent).toBe("recap");
+    if (weekRecap.intent === "recap") {
+      expect(weekRecap.data.period).toBe("this_week");
+    }
+
+    const monthFood = parseDeterministicMessage("pengeluaran makanan bulan ini");
+    expect(monthFood.intent).toBe("recap");
+    if (monthFood.intent === "recap") {
+      expect(monthFood.data.period).toBe("this_month");
+      expect(monthFood.data.category).toBe("Makanan");
+    }
+  });
+
   test("detects group logs as unprocessable offline", () => {
     const multiline = `[10/19, 09:00] Budi: Rapat jam 1 siang nanti ya teman-teman
 [10/19, 09:01] Siti: Siap, Arya jangan lupa bawa materi hukum perdata

@@ -96,7 +96,7 @@ export function parseDeterministicMessage(rawText: string): DeterministicResult 
   }
 
   // 3. Check recap query
-  if (/\brekap\b|\bpengeluaran\b|\bpemasukan\b|\btotal\b/i.test(lower)) {
+  if (/\brekap\b|\bpengeluaran\b|\bpemasukan\b|\btotal\b|\bhabis\s+berapa\b|\bkeluar\s+berapa\b/i.test(lower)) {
     // Detect optional category filter (Makanan, Transport, dll.)
     const inferredCat = inferCategory(text);
     const category = inferredCat !== "Lainnya" ? inferredCat : undefined;
