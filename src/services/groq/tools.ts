@@ -5,14 +5,52 @@ export const GROQ_TOOLS = [
     type: "function" as const,
     function: {
       name: "record_transaction",
-      description: "Mencatat transaksi pengeluaran atau pemasukan uang pribadi Arya.",
+      description:
+        "Mencatat satu atau beberapa transaksi pengeluaran atau pemasukan uang pribadi Arya. Jika ada beberapa item transaksi dalam satu pesan (misal: 'kopi 18rb, parkir 3rb, kas 20rb pake gopay'), masukkan semua transaksi ke dalam array 'items'.",
       parameters: {
         type: "object",
         properties: {
+          items: {
+            type: "array",
+            description: "Daftar rincian transaksi jika terdapat lebih dari satu pengeluaran/pemasukan.",
+            items: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["expense", "income"],
+                  description: "'expense' untuk pengeluaran, 'income' untuk pemasukan.",
+                },
+                amount: {
+                  type: "integer",
+                  description: "Nominal uang dalam bilangan bulat Rupiah (contoh: 18000 untuk 18rb).",
+                },
+                wallet: {
+                  type: "string",
+                  enum: ["Tunai", "GoPay", "Mandiri"],
+                  description: "Dompet yang digunakan untuk item ini. Jika tidak spesifik, isi null.",
+                },
+                category: {
+                  type: "string",
+                  enum: [...EXPENSE_CATEGORIES],
+                  description: "Kategori pengeluaran.",
+                },
+                description: {
+                  type: "string",
+                  description: "Deskripsi singkat item (misal: 'Kopi', 'Parkir', 'Kas').",
+                },
+                transaction_date: {
+                  type: "string",
+                  description: "Tanggal transaksi format YYYY-MM-DD sesuai waktu WIB.",
+                },
+              },
+              required: ["type", "amount", "description", "transaction_date"],
+            },
+          },
           type: {
             type: "string",
             enum: ["expense", "income"],
-            description: "'expense' untuk pengeluaran (beli makanan, bayar parkir, dll), 'income' untuk pemasukan (terima transfer, uang saku, gaji).",
+            description: "'expense' untuk pengeluaran, 'income' untuk pemasukan.",
           },
           amount: {
             type: "integer",
@@ -37,7 +75,6 @@ export const GROQ_TOOLS = [
             description: "Tanggal transaksi format YYYY-MM-DD sesuai waktu WIB. Gunakan tanggal acuan sistem jika 'tadi pagi', 'kemarin', 'lusa', dll.",
           },
         },
-        required: ["type", "amount", "description", "transaction_date"],
       },
     },
   },

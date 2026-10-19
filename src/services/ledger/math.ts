@@ -10,37 +10,214 @@ export function formatRupiah(amount: number): string {
   return isNegative ? `-Rp${formatted}` : `Rp${formatted}`;
 }
 
+export const EXTREME_AMOUNT_THRESHOLD = 10_000_000; // Rp 10.000.000
+
+/**
+ * Checks whether an amount is considered unusually large (> Rp 10.000.000)
+ */
+export function isExtremeAmount(amount: number): boolean {
+  return amount > EXTREME_AMOUNT_THRESHOLD;
+}
+
+const INDONESIAN_NUM_WORDS: Record<string, number> = {
+  nol: 0,
+  kosong: 0,
+  satu: 1,
+  se: 1,
+  dua: 2,
+  tiga: 3,
+  empat: 4,
+  lima: 5,
+  enam: 6,
+  tujuh: 7,
+  delapan: 8,
+  sembilan: 9,
+  sepuluh: 10,
+  sebelas: 11,
+  seratus: 100,
+  seribu: 1000,
+  sejuta: 1000000,
+};
+
+/**
+ * Parses pure Indonesian words to number (e.g. "dua ratus lima puluh ribu", "sejuta", "tiga belas ribu")
+ */
+export function parseIndonesianWordNumber(text: string): number | null {
+  const cleaned = text.trim().toLowerCase();
+  if (!cleaned) return null;
+
+  if (cleaned === "sejuta" || cleaned === "satu juta") return 1000000;
+  if (cleaned === "setengah juta") return 500000;
+  if (cleaned === "seribu") return 1000;
+  if (cleaned === "seratus") return 100;
+  if (cleaned === "sepuluh") return 10;
+  if (cleaned === "sebelas") return 11;
+
+  // Split tokens
+  const tokens = cleaned.split(/[\s-]+/).filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  let total = 0;
+  let currentGroup = 0;
+  let currentVal = 0;
+  let matchedAny = false;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+
+    if (t === "juta") {
+      matchedAny = true;
+      currentGroup += currentVal;
+      if (currentGroup === 0) currentGroup = 1;
+      total += currentGroup * 1000000;
+      currentGroup = 0;
+      currentVal = 0;
+    } else if (t === "ribu") {
+      matchedAny = true;
+      currentGroup += currentVal;
+      if (currentGroup === 0) currentGroup = 1;
+      total += currentGroup * 1000;
+      currentGroup = 0;
+      currentVal = 0;
+    } else if (t === "ratus") {
+      matchedAny = true;
+      const multiplier = currentVal || 1;
+      currentGroup += multiplier * 100;
+      currentVal = 0;
+    } else if (t === "puluh") {
+      matchedAny = true;
+      const multiplier = currentVal || 1;
+      currentGroup += multiplier * 10;
+      currentVal = 0;
+    } else if (t === "belas") {
+      matchedAny = true;
+      currentGroup += (currentVal || 1) + 10;
+      currentVal = 0;
+    } else if (t === "setengah") {
+      matchedAny = true;
+      currentVal = 0.5;
+    } else if (INDONESIAN_NUM_WORDS[t] !== undefined) {
+      matchedAny = true;
+      currentVal = INDONESIAN_NUM_WORDS[t];
+    } else if (/^\d+$/.test(t)) {
+      matchedAny = true;
+      currentVal = parseInt(t, 10);
+    } else {
+      // Unrecognized word inside phrase
+      return null;
+    }
+  }
+
+  currentGroup += currentVal;
+  total += currentGroup;
+
+  return matchedAny && total > 0 ? Math.round(total) : null;
+}
+
 /**
  * Parses colloquial Indonesian amount strings:
- * "18k", "18rb", "18ribu", "18.000", "1,5jt", "250rb", etc.
+ * "18k", "18rb", "18ribu", "18.000", "1,5jt", "250rb", "seratus ribu", "dua puluh lima ribu", "Rp 50.000", etc.
  */
 export function parseRupiahAmount(raw: string): number | null {
   if (!raw || typeof raw !== "string") return null;
 
-  let cleaned = raw.trim().toLowerCase().replace(/\s+/g, "");
+  let cleaned = raw.trim().toLowerCase();
 
-  // Match million: "1.5jt", "1,5jt", "2jt", "1.5juta"
-  const jtMatch = cleaned.match(/^(\d+(?:[.,]\d+)?)(?:jt|juta)$/);
+  // Strip leading currency symbols "rp", "rp.", "idr"
+  cleaned = cleaned.replace(/^(?:rp\.?|idr)\s*/i, "").trim();
+
+  // Check word-based number directly first (e.g. "seratus ribu", "dua puluh ribu")
+  const wordResult = parseIndonesianWordNumber(cleaned);
+  if (wordResult !== null && wordResult > 0) {
+    return wordResult;
+  }
+
+  // Remove interior spaces for shorthand forms like "50 rb", "50 k", "1.5 jt"
+  const compact = cleaned.replace(/\s+/g, "");
+
+  // Match million: "1.5jt", "1,5jt", "2jt", "1.5juta", "2juta"
+  const jtMatch = compact.match(/^(\d+(?:[.,]\d+)?)(?:jt|juta)$/);
   if (jtMatch && jtMatch[1]) {
     const val = parseFloat(jtMatch[1].replace(",", "."));
     if (!isNaN(val)) return Math.round(val * 1000000);
   }
 
   // Match thousand: "18k", "18rb", "18ribu"
-  const rbMatch = cleaned.match(/^(\d+(?:[.,]\d+)?)(?:k|rb|ribu)$/);
+  const rbMatch = compact.match(/^(\d+(?:[.,]\d+)?)(?:k|rb|ribu)$/);
   if (rbMatch && rbMatch[1]) {
     const val = parseFloat(rbMatch[1].replace(",", "."));
     if (!isNaN(val)) return Math.round(val * 1000);
   }
 
   // Match formatted dots: "18.000" or raw "18000"
-  const dotMatch = cleaned.replace(/[.]/g, "");
+  const dotMatch = compact.replace(/[.]/g, "");
   if (/^\d+$/.test(dotMatch)) {
     const val = parseInt(dotMatch, 10);
     if (!isNaN(val)) return val;
   }
 
   return null;
+}
+
+/**
+ * Finds all occurrences of Rupiah amounts in a sentence.
+ * Returns an array of parsed amounts with their raw substring match.
+ */
+export function extractRupiahAmounts(
+  text: string
+): Array<{ amount: number; raw: string; start: number; end: number }> {
+  const results: Array<{ amount: number; raw: string; start: number; end: number }> = [];
+
+  // 1. Match numeric expressions: "18k", "18rb", "18.000", "Rp 50.000", "1.5jt", "25 ribu", "50 rb"
+  const numRegex =
+    /(?:rp\.?\s*)?(\d{1,3}(?:[.]\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?\s*(?:jt|juta|k|rb|ribu)|\b\d{3,9}\b)/gi;
+
+  let match: RegExpExecArray | null;
+  const occupiedRanges: Array<[number, number]> = [];
+
+  while ((match = numRegex.exec(text)) !== null) {
+    const raw = match[0];
+    const parsed = parseRupiahAmount(raw);
+    if (parsed !== null && parsed >= 100) {
+      // ignore tiny numbers like single digits unless explicitly k/rb
+      results.push({
+        amount: parsed,
+        raw,
+        start: match.index,
+        end: match.index + raw.length,
+      });
+      occupiedRanges.push([match.index, match.index + raw.length]);
+    }
+  }
+
+  // 2. Match Indonesian word numbers: "seratus ribu", "dua puluh lima ribu", "sejuta", etc.
+  const wordRegex =
+    /\b(?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|belas|puluh|seratus|ratus|seribu|ribu|sejuta|juta|setengah)(?:\s+(?:satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|belas|puluh|seratus|ratus|seribu|ribu|sejuta|juta|setengah))*\b/gi;
+
+  while ((match = wordRegex.exec(text)) !== null) {
+    const raw = match[0].trim();
+    const start = match.index;
+    const end = start + raw.length;
+
+    // Check if overlap with numeric matches
+    const overlaps = occupiedRanges.some(([s, e]) => Math.max(s, start) < Math.min(e, end));
+    if (overlaps) continue;
+
+    // Only consider as money if it contains scale words or parses to >= 500
+    if (!/(?:ribu|juta|ratus|puluh|seratus|seribu|sejuta)/i.test(raw)) continue;
+
+    const parsed = parseIndonesianWordNumber(raw);
+    if (parsed !== null && parsed >= 500) {
+      results.push({
+        amount: parsed,
+        raw,
+        start,
+        end,
+      });
+    }
+  }
+
+  return results.sort((a, b) => a.start - b.start);
 }
 
 /**

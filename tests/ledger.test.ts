@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   formatRupiah,
   parseRupiahAmount,
+  extractRupiahAmounts,
+  isExtremeAmount,
   computeBalancesFromTransactions,
   getWIBDateRange,
 } from "../src/services/ledger/math";
@@ -23,7 +25,41 @@ describe("Ledger Math & Currency Formatting", () => {
     expect(parseRupiahAmount("1,5jt")).toBe(1500000);
     expect(parseRupiahAmount("1.5jt")).toBe(1500000);
     expect(parseRupiahAmount("250rb")).toBe(250000);
+    expect(parseRupiahAmount("50 rb")).toBe(50000);
+    expect(parseRupiahAmount("50 k")).toBe(50000);
+    expect(parseRupiahAmount("Rp 50.000")).toBe(50000);
+    expect(parseRupiahAmount("seratus ribu")).toBe(100000);
+    expect(parseRupiahAmount("dua puluh lima ribu")).toBe(25000);
+    expect(parseRupiahAmount("tiga ratus lima puluh ribu")).toBe(350000);
+    expect(parseRupiahAmount("sejuta")).toBe(1000000);
+    expect(parseRupiahAmount("satu juta")).toBe(1000000);
+    expect(parseRupiahAmount("dua juta lima ratus ribu")).toBe(2500000);
+    expect(parseRupiahAmount("sepuluh ribu")).toBe(10000);
+    expect(parseRupiahAmount("dua belas ribu")).toBe(12000);
+    expect(parseRupiahAmount("setengah juta")).toBe(500000);
     expect(parseRupiahAmount("kopi")).toBeNull();
+  });
+
+  test("extractRupiahAmounts finds multiple amounts in a sentence", () => {
+    const text = "kopi 18rb, parkir 3rb, bayar kas 20rb pake gopay";
+    const found = extractRupiahAmounts(text);
+    expect(found.length).toBe(3);
+    expect(found[0].amount).toBe(18000);
+    expect(found[1].amount).toBe(3000);
+    expect(found[2].amount).toBe(20000);
+
+    const wordText = "keluar seratus ribu dari mandiri dan beli bensin dua puluh lima ribu";
+    const foundWord = extractRupiahAmounts(wordText);
+    expect(foundWord.length).toBe(2);
+    expect(foundWord[0].amount).toBe(100000);
+    expect(foundWord[1].amount).toBe(25000);
+  });
+
+  test("isExtremeAmount flags amounts > Rp 10.000.000", () => {
+    expect(isExtremeAmount(50000)).toBe(false);
+    expect(isExtremeAmount(10000000)).toBe(false);
+    expect(isExtremeAmount(10000001)).toBe(true);
+    expect(isExtremeAmount(25000000)).toBe(true);
   });
 
   test("computeBalancesFromTransactions correctly adjusts wallets", () => {

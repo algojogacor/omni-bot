@@ -1,4 +1,4 @@
-import { parseRupiahAmount } from "../ledger/math";
+import { parseRupiahAmount, extractRupiahAmounts } from "../ledger/math";
 import { WalletName, ExpenseCategory, EXPENSE_CATEGORIES } from "../../config/constants";
 
 export type DeterministicResult =
@@ -11,6 +11,14 @@ export type DeterministicResult =
         category: ExpenseCategory;
         description: string;
         transactionDate: string; // YYYY-MM-DD
+        items?: Array<{
+          type: "expense" | "income";
+          amount: number;
+          wallet: WalletName | null;
+          category: ExpenseCategory;
+          description: string;
+          transactionDate: string;
+        }>;
       };
     }
   | {
@@ -179,33 +187,80 @@ export function parseDeterministicMessage(rawText: string): DeterministicResult 
     }
   }
 
-  // 6. Check transaction: "kopi 18rb gopay", "makan siang 25k tunai", "dapat 50k dari mama masuk bank"
-  const words = text.split(/\s+/);
-  let detectedAmount: number | null = null;
-  let amountWord = "";
+  // 6. Check transaction: multi-item or single-item
+  const extractedAmounts = extractRupiahAmounts(text);
 
-  for (const w of words) {
-    const parsed = parseRupiahAmount(w);
-    if (parsed !== null && parsed > 0) {
-      detectedAmount = parsed;
-      amountWord = w;
-      break;
+  // 6a. Multi-item transaction detected: e.g. "kopi 18rb, parkir 3rb, bayar kas 20rb pake gopay"
+  if (extractedAmounts.length > 1) {
+    const defaultWallet = detectWallet(text);
+    const clauses = text.split(/[,;\n]|\bdan\b/i).map((c) => c.trim()).filter(Boolean);
+    const items: Array<{
+      type: "expense" | "income";
+      amount: number;
+      wallet: WalletName | null;
+      category: ExpenseCategory;
+      description: string;
+      transactionDate: string;
+    }> = [];
+
+    for (const clause of clauses) {
+      const clauseAmounts = extractRupiahAmounts(clause);
+      if (clauseAmounts.length === 0) continue;
+      const clauseAmt = clauseAmounts[0].amount;
+      const clauseWallet = detectWallet(clause) || defaultWallet;
+      const isIncome = /\bdapat\b|\bterima\b|\bgaji\b|\btransferan\b|\buang saku\b|\bdikasih\b/i.test(clause);
+
+      let desc = clause;
+      if (clauseAmounts[0].raw) {
+        desc = desc.replace(new RegExp(`\\b${clauseAmounts[0].raw.replace(/[.]/g, "\\.")}\\b`, "i"), "");
+      }
+      if (clauseWallet) {
+        desc = desc.replace(new RegExp(`\\b${clauseWallet}\\b`, "i"), "");
+      }
+      desc = desc.replace(/\bpake\b|\bpakai\b|\bdari\b|\bke\b/gi, "").replace(/\s+/g, " ").trim();
+      if (!desc) desc = isIncome ? "Pemasukan" : "Pengeluaran";
+
+      items.push({
+        type: isIncome ? "income" : "expense",
+        amount: clauseAmt,
+        wallet: clauseWallet,
+        category: isIncome ? "Lainnya" : inferCategory(desc),
+        description: desc,
+        transactionDate: today,
+      });
+    }
+
+    if (items.length > 0) {
+      const totalAmt = items.reduce((sum, it) => sum + it.amount, 0);
+      return {
+        intent: "transaction",
+        data: {
+          type: "expense",
+          amount: totalAmt,
+          wallet: defaultWallet,
+          category: "Lainnya",
+          description: "Transaksi Jamak",
+          transactionDate: today,
+          items,
+        },
+      };
     }
   }
 
-  if (detectedAmount !== null) {
+  // 6b. Single transaction detected: e.g. "kopi 18rb gopay", "keluar seratus ribu dari mandiri"
+  if (extractedAmounts.length === 1) {
+    const detectedAmount = extractedAmounts[0].amount;
     const isIncome = /\bdapat\b|\bterima\b|\bgaji\b|\btransferan\b|\buang saku\b|\bdikasih\b/i.test(lower);
     const wallet = detectWallet(text);
 
-    // Clean description by removing amount and wallet word
     let desc = text;
-    if (amountWord) {
-      desc = desc.replace(new RegExp(`\\b${amountWord.replace(/[.]/g, "\\.")}\\b`, "i"), "");
+    if (extractedAmounts[0].raw) {
+      desc = desc.replace(new RegExp(`\\b${extractedAmounts[0].raw.replace(/[.]/g, "\\.")}\\b`, "i"), "");
     }
     if (wallet) {
       desc = desc.replace(new RegExp(`\\b${wallet}\\b`, "i"), "");
     }
-    desc = desc.replace(/\s+/g, " ").trim();
+    desc = desc.replace(/\bpake\b|\bpakai\b|\bdari\b|\bmasuk\b|\bkeluar\b/gi, "").replace(/\s+/g, " ").trim();
     if (!desc) desc = isIncome ? "Pemasukan" : "Pengeluaran";
 
     const category = isIncome ? "Lainnya" : inferCategory(desc || text);

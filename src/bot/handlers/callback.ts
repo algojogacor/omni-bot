@@ -20,6 +20,20 @@ export async function handleCallbackQuery(ctx: Context) {
   // 1. Confirm draft (Save to DB)
   if (action === "confirm_draft" && draftId) {
     try {
+      const draft = await DraftManager.getDraft(draftId);
+      if (!draft) {
+        await ctx.answerCallbackQuery({ text: "Draf tidak ditemukan atau sudah dihapus.", show_alert: true });
+        return;
+      }
+      if (draft.status === "approved") {
+        await ctx.answerCallbackQuery({ text: "Draf ini sudah berhasil disimpan sebelumnya.", show_alert: false });
+        return;
+      }
+      if (draft.status === "rejected") {
+        await ctx.answerCallbackQuery({ text: "Draf ini sudah dibatalkan.", show_alert: false });
+        return;
+      }
+
       const updatedWallets = await DraftManager.commitDraft(draftId);
 
       let successMsg = `✅ *Catatan berhasil disimpan ke buku kas!*\n\n`;
@@ -37,6 +51,11 @@ export async function handleCallbackQuery(ctx: Context) {
 
   // 2. Cancel draft
   if (action === "cancel_draft" && draftId) {
+    const draft = await DraftManager.getDraft(draftId);
+    if (!draft || draft.status !== "pending") {
+      await ctx.answerCallbackQuery({ text: "Draf sudah tidak aktif atau sudah diproses.", show_alert: false });
+      return;
+    }
     await DraftManager.cancelDraft(draftId);
     await ctx.editMessageText("❌ *Draf telah dibatalkan.*", { parse_mode: "Markdown" });
     return;
@@ -52,7 +71,18 @@ export async function handleCallbackQuery(ctx: Context) {
     };
     const walletName = walletMap[rawWallet] || "Tunai";
 
-    const updated = await DraftManager.updateDraft(draftId, { wallet: walletName });
+    const draft = await DraftManager.getDraft(draftId);
+    if (!draft) return;
+
+    const payload = JSON.parse(draft.payload);
+    payload.wallet = walletName;
+    if (payload.items && Array.isArray(payload.items)) {
+      payload.items.forEach((it: any) => {
+        if (!it.wallet) it.wallet = walletName;
+      });
+    }
+
+    const updated = await DraftManager.updateDraft(draftId, payload);
     const cardText = DraftManager.formatDraftCard(updated);
 
     await ctx.editMessageText(cardText, {
@@ -64,13 +94,33 @@ export async function handleCallbackQuery(ctx: Context) {
 
   // 4. Edit draft menu
   if (action === "edit_draft" && draftId) {
+    const draft = await DraftManager.getDraft(draftId);
+    const isMulti = draft ? (JSON.parse(draft.payload)?.items?.length > 1) : false;
     await ctx.editMessageReplyMarkup({
-      reply_markup: BotKeyboards.editFieldPicker(draftId),
+      reply_markup: BotKeyboards.editFieldPicker(draftId, isMulti),
     });
     return;
   }
 
-  // 5. View draft (back button)
+  // 5. Delete specific item from multi-item draft
+  if (action === "del_item" && draftId && parts[2] !== undefined) {
+    const itemIdx = parseInt(parts[2], 10);
+    const updated = await DraftManager.deleteItem(draftId, itemIdx);
+    if (!updated) {
+      await ctx.editMessageText("❌ *Semua item dalam draf telah dihapus. Draf dibatalkan.*", {
+        parse_mode: "Markdown",
+      });
+      return;
+    }
+    const cardText = DraftManager.formatDraftCard(updated);
+    await ctx.editMessageText(cardText, {
+      parse_mode: "Markdown",
+      reply_markup: BotKeyboards.draftConfirmation(draftId),
+    });
+    return;
+  }
+
+  // 6. View draft (back button)
   if (action === "view_draft" && draftId) {
     const draft = await DraftManager.getDraft(draftId);
     if (!draft) return;
@@ -82,7 +132,7 @@ export async function handleCallbackQuery(ctx: Context) {
     return;
   }
 
-  // 6. Edit Field
+  // 7. Edit Field
   if (action === "edit_field" && draftId && parts[2]) {
     const field = parts[2];
     if (field === "category") {
@@ -96,6 +146,17 @@ export async function handleCallbackQuery(ctx: Context) {
       await ctx.editMessageReplyMarkup({
         reply_markup: BotKeyboards.walletPicker(draftId),
       });
+      return;
+    }
+
+    if (field === "del_items") {
+      const draft = await DraftManager.getDraft(draftId);
+      const p = draft ? JSON.parse(draft.payload) : null;
+      if (p?.items && p.items.length > 0) {
+        await ctx.editMessageReplyMarkup({
+          reply_markup: BotKeyboards.itemDeletePicker(draftId, p.items),
+        });
+      }
       return;
     }
 

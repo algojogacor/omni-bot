@@ -49,6 +49,46 @@ export function createBot(): Bot | null {
     userEntry.queue.push(text);
   });
 
+  // 4b. Voice notes / audio handler (PRD 2.23: "Voice note ditunda")
+  bot.on(["message:voice", "message:audio"], async (ctx) => {
+    updateHealthState({ lastUpdateProcessed: new Date().toISOString() });
+    await ctx.reply(
+      "🎤 *Input suara/voice note belum didukung.*\n\n" +
+      "Saat ini Omni-Bot hanya menerima input teks langsung. Silakan ketik transaksi atau jadwalmu ya!",
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // 4c. Photo / receipt images handler (PRD 2.23: "Foto struk dilewati")
+  bot.on("message:photo", async (ctx) => {
+    updateHealthState({ lastUpdateProcessed: new Date().toISOString() });
+    await ctx.reply(
+      "📸 *Foto/gambar struk belum didukung.*\n\n" +
+      "Omni-Bot fokus pada pencatatan teks cepat tanpa upload gambar. Cukup ketik langsung catatanmu, misalnya: _'kopi 18rb gopay'_.",
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // 4d. Stickers and animations
+  bot.on(["message:sticker", "message:animation"], async (ctx) => {
+    updateHealthState({ lastUpdateProcessed: new Date().toISOString() });
+    await ctx.reply(
+      "🤖 *Stiker diterima, tapi aku hanya bisa memproses teks.*\n\n" +
+      "Silakan ketik catatan keuangan atau jadwalmu ya!",
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // 4e. Documents/files handler
+  bot.on("message:document", async (ctx) => {
+    updateHealthState({ lastUpdateProcessed: new Date().toISOString() });
+    await ctx.reply(
+      "📄 *Dokumen belum dapat diproses secara langsung.*\n\n" +
+      "Jika ada jadwal atau catatan dari grup, kamu bisa langsung salin dan tempel (copy-paste) teksnya ke sini.",
+      { parse_mode: "Markdown" }
+    );
+  });
+
   // 5. Handle inline keyboard callback queries
   bot.on("callback_query:data", async (ctx) => {
     updateHealthState({ lastUpdateProcessed: new Date().toISOString() });

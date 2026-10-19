@@ -71,6 +71,32 @@ describe("Deterministic Offline Parser", () => {
     }
   });
 
+  test("parses multi-item expense accurately", () => {
+    const res = parseDeterministicMessage("kopi 18rb, parkir 3rb, bayar kas 20rb pake gopay");
+    expect(res.intent).toBe("transaction");
+    if (res.intent === "transaction") {
+      expect(res.data.amount).toBe(41000);
+      expect(res.data.items).toBeDefined();
+      expect(res.data.items?.length).toBe(3);
+      expect(res.data.items?.[0].amount).toBe(18000);
+      expect(res.data.items?.[0].description.toLowerCase()).toContain("kopi");
+      expect(res.data.items?.[1].amount).toBe(3000);
+      expect(res.data.items?.[1].description.toLowerCase()).toContain("parkir");
+      expect(res.data.items?.[2].amount).toBe(20000);
+      expect(res.data.items?.[2].description.toLowerCase()).toContain("kas");
+    }
+  });
+
+  test("parses Indonesian word numbers in transaction sentence", () => {
+    const res = parseDeterministicMessage("keluar seratus ribu dari mandiri");
+    expect(res.intent).toBe("transaction");
+    if (res.intent === "transaction") {
+      expect(res.data.amount).toBe(100000);
+      expect(res.data.wallet).toBe("Mandiri");
+      expect(res.data.type).toBe("expense");
+    }
+  });
+
   test("detects group logs as unprocessable offline", () => {
     const multiline = `[10/19, 09:00] Budi: Rapat jam 1 siang nanti ya teman-teman
 [10/19, 09:01] Siti: Siap, Arya jangan lupa bawa materi hukum perdata

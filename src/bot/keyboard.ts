@@ -27,7 +27,15 @@ export class BotKeyboards {
   /**
    * Edit draft field selection keyboard
    */
-  static editFieldPicker(draftId: string): InlineKeyboard {
+  static editFieldPicker(draftId: string, isMultiItem = false): InlineKeyboard {
+    if (isMultiItem) {
+      return new InlineKeyboard()
+        .text("👛 Ganti Dompet", `edit_field:${draftId}:wallet`)
+        .text("🗑 Hapus Item", `edit_field:${draftId}:del_items`)
+        .row()
+        .text("⬅️ Kembali ke Draf", `view_draft:${draftId}`);
+    }
+
     return new InlineKeyboard()
       .text("💰 Ganti Nominal", `edit_field:${draftId}:amount`)
       .text("👛 Ganti Dompet", `edit_field:${draftId}:wallet`)
@@ -36,6 +44,22 @@ export class BotKeyboards {
       .text("📅 Ganti Tanggal", `edit_field:${draftId}:date`)
       .row()
       .text("⬅️ Kembali ke Draf", `view_draft:${draftId}`);
+  }
+
+  /**
+   * Keyboard to choose which item to delete from a multi-item draft
+   */
+  static itemDeletePicker(
+    draftId: string,
+    items: Array<{ description: string; amount: number }>
+  ): InlineKeyboard {
+    const kb = new InlineKeyboard();
+    items.forEach((item, idx) => {
+      kb.text(`🗑 ${idx + 1}. ${item.description.slice(0, 12)}`, `del_item:${draftId}:${idx}`);
+      if (idx % 2 === 1) kb.row();
+    });
+    kb.row().text("⬅️ Batal", `view_draft:${draftId}`);
+    return kb;
   }
 
   /**
