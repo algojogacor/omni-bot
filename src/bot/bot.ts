@@ -83,11 +83,27 @@ export async function startBot(bot: Bot) {
   // Start Weekly proactive scheduler
   WeeklyScheduler.start(bot);
 
-  // Start long polling
-  bot.start({
-    onStart: (botInfo) => {
-      console.log(`✅ [Bot] Bot running as @${botInfo.username}`);
-      updateHealthState({ botRunning: true, botUsername: botInfo.username });
-    },
+  // Resilient long polling loop that survives 409 conflicts and auto-reconnects
+  const runPolling = async () => {
+    while (true) {
+      try {
+        await bot.start({
+          drop_pending_updates: true,
+          onStart: (botInfo) => {
+            console.log(`✅ [Bot] Bot running as @${botInfo.username}`);
+            updateHealthState({ botRunning: true, botUsername: botInfo.username });
+          },
+        });
+        break; // If stopped cleanly
+      } catch (err: any) {
+        console.warn(`[Bot] Polling loop interrupted (${err?.message || err}). Retrying in 4s...`);
+        updateHealthState({ botRunning: false });
+        await new Promise((res) => setTimeout(res, 4000));
+      }
+    }
+  };
+
+  runPolling().catch((err) => {
+    console.error("[Bot] Fatal polling loop error:", err);
   });
 }

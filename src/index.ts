@@ -34,6 +34,22 @@ async function bootstrap() {
     console.log("ℹ️ [Bot] TELEGRAM_BOT_TOKEN not yet provided. Health server remains active.");
     updateHealthState({ botRunning: false });
   }
+
+  // 4. Graceful shutdown listeners
+  const shutdown = async (signal: string) => {
+    console.log(`🛑 Received ${signal}. Shutting down gracefully...`);
+    if (bot) {
+      try {
+        await bot.stop();
+      } catch (err) {
+        // ignore
+      }
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 bootstrap().catch((err) => {
