@@ -324,8 +324,17 @@ async function processWithDeterministic(ctx: Context, text: string, userId: stri
   }
 
   if (result.intent === "recap") {
-    const recap = await LedgerService.getRecap({ period: result.data.period });
-    let msg = `📊 *REKAP KEUANGAN*\n📅 Rentang: ${recap.dateRangeLabel}\n\n`;
+    const recap = await LedgerService.getRecap({
+      period: result.data.period,
+      startDate: result.data.startDate,
+      endDate: result.data.endDate,
+      category: result.data.category,
+    });
+    let msg = `📊 *REKAP KEUANGAN*\n📅 Rentang: ${recap.dateRangeLabel}\n`;
+    if (result.data.category) {
+      msg += `🏷 Kategori: *${result.data.category}*\n`;
+    }
+    msg += `\n`;
 
     if (result.data.askBalance) {
       msg += `👛 *SALDO PER DOMPET*:\n`;

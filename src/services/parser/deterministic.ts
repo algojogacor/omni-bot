@@ -28,6 +28,9 @@ export type DeterministicResult =
       data: {
         askBalance?: boolean;
         period?: "today" | "this_week" | "this_month" | "last_month";
+        startDate?: string;
+        endDate?: string;
+        category?: ExpenseCategory;
       };
     }
   | {
@@ -93,12 +96,32 @@ export function parseDeterministicMessage(rawText: string): DeterministicResult 
   }
 
   // 3. Check recap query
-  if (/\brekap\b|\bpengeluaran\b|\bpemasukan\b/i.test(lower)) {
-    if (lower.includes("hari ini")) return { intent: "recap", data: { period: "today" } };
-    if (lower.includes("minggu ini")) return { intent: "recap", data: { period: "this_week" } };
-    if (lower.includes("bulan lalu")) return { intent: "recap", data: { period: "last_month" } };
-    if (lower.includes("bulan ini")) return { intent: "recap", data: { period: "this_month" } };
-    return { intent: "recap", data: { period: "this_month" } };
+  if (/\brekap\b|\bpengeluaran\b|\bpemasukan\b|\btotal\b/i.test(lower)) {
+    // Detect optional category filter (Makanan, Transport, dll.)
+    const inferredCat = inferCategory(text);
+    const category = inferredCat !== "Lainnya" ? inferredCat : undefined;
+
+    // Specific date: "tanggal 15"
+    const dateMatch = text.match(/tanggal\s+(\d{1,2})/i);
+    if (dateMatch && dateMatch[1]) {
+      const day = String(dateMatch[1]).padStart(2, "0");
+      const currentYearMonth = today.slice(0, 7);
+      const targetDate = `${currentYearMonth}-${day}`;
+      return { intent: "recap", data: { startDate: targetDate, endDate: targetDate, category } };
+    }
+
+    // Yesterday: "kemarin"
+    if (lower.includes("kemarin")) {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      return { intent: "recap", data: { startDate: yesterday, endDate: yesterday, category } };
+    }
+
+    if (lower.includes("hari ini")) return { intent: "recap", data: { period: "today", category } };
+    if (lower.includes("minggu ini")) return { intent: "recap", data: { period: "this_week", category } };
+    if (lower.includes("bulan lalu")) return { intent: "recap", data: { period: "last_month", category } };
+    if (lower.includes("bulan ini")) return { intent: "recap", data: { period: "this_month", category } };
+
+    return { intent: "recap", data: { period: "this_month", category } };
   }
 
   // 4. Check initial balance: "saldo awal tunai 100rb"
