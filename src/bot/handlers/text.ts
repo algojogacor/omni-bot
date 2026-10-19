@@ -24,6 +24,29 @@ export async function handleUserText(ctx: Context, text: string) {
   const userId = ctx.from?.id?.toString() || "";
   const lower = text.trim().toLowerCase();
 
+  // 0. Check /start command
+  if (lower === "/start") {
+    await ctx.reply(
+      "👋 *Halo Arya! Saya Omni-Bot, asisten pribadi kamu.*\n\n" +
+      "Ketik apa saja secara kasual tanpa perlu mengingat perintah:\n\n" +
+      "👛 *Catat Transaksi*:\n" +
+      "• _'kopi susu 18rb gopay'_\n" +
+      "• _'makan soto ayam 25k tunai'_\n" +
+      "• _'dapat 100rb dari mama masuk mandiri'_\n\n" +
+      "🔄 *Pindah Saldo (Transfer)*:\n" +
+      "• _'transfer 50rb dari mandiri ke gopay'_\n" +
+      "• _'tarik tunai 100k dari mandiri'_\n\n" +
+      "📊 *Cek Saldo & Rekap*:\n" +
+      "• _'saldo'_ atau _'uangku tinggal berapa'_\n" +
+      "• _'rekap hari ini'_ atau _'pengeluaran minggu ini'_\n\n" +
+      "📋 *Log Obrolan Grup*:\n" +
+      "• Paste/forward log grup panjang -> saya rangkumkan TL;DR, daftar tugas (tugasmu di paling atas), dan jadwal ke Google Calendar.\n\n" +
+      "_Semua transaksi selalu ditampilkan sebagai draf terlebih dahulu untuk kamu setujui sebelum disimpan ke buku kas!_",
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
   // 1. Check CSV export command
   if (/^(export\s+csv|unduh\s+(?:data|csv)|download\s+csv|cadangan)$/i.test(lower)) {
     const csvContent = await LedgerService.exportCSV();
